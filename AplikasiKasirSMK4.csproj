@@ -13,4 +13,11 @@
     <PackageReference Include="ReaLTaiizor" Version="3.8.2.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Credential database dibaca dari file ini, bukan dari kode C# -->
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

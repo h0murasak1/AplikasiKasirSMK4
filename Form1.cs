@@ -1,92 +1,191 @@
-using AplikasiKasirSMK4;
 using MySql.Data.MySqlClient;
 
 namespace AplikasiKasirSMK4
 {
     public partial class Form1 : Form
     {
+        private readonly Koneksi _koneksi = new();
+        private bool _sedangKeluar;
+
         public Form1()
         {
             InitializeComponent();
+            FormClosing += Form1_FormClosing;
         }
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            // Memanggil class Koneksi
-            Koneksi koneksiDB = new Koneksi();
+            if (_koneksi.TestConnection(out string pesanError))
+            {
+                MessageBox.Show(
+                    "Koneksi ke Database MySQL Berhasil!",
+                    "Informasi",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            else
+            {
+                MessageBox.Show(
+                    "Koneksi Gagal. Pastikan XAMPP/MySQL sudah berjalan!\n\n"
+                    + "Detail Error: " + pesanError,
+                    "Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
 
-            // Menjalankan fungsi tes koneksi
-            koneksiDB.CekKoneksi();
+            txtUsername.Focus();
         }
 
         private void btnLogin_Click(object sender, EventArgs e)
         {
-            // Cek apakah kolom kosong
-            if (txtUsername.Text == "" || txtPassword.Text == "")
+            string username = txtUsername.Text.Trim();
+            string password = txtPassword.Text;
+
+            // Validasi input tidak boleh kosong
+            if (username.Length == 0 || password.Length == 0)
             {
-                MessageBox.Show("Username dan Password tidak boleh kosong!", "Peringatan", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(
+                    "Username dan Password tidak boleh kosong!",
+                    "Peringatan",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
                 return;
             }
 
-            // Memanggil class Koneksi
-            Koneksi koneksiDB = new Koneksi();
-
             try
             {
-                using (MySqlConnection conn = koneksiDB.GetConn())
+                using MySqlConnection conn = _koneksi.GetConn();
+                conn.Open();
+
+                using MySqlCommand cmd = new(
+                    "SELECT id_user, password, nama_lengkap, role "
+                    + "FROM tb_user WHERE username = @username LIMIT 1",
+                    conn);
+                cmd.Parameters.AddWithValue("@username", username);
+
+                int idUser;
+                string passwordTersimpan;
+                string namaLengkap;
+                string role;
+
+                using (MySqlDataReader reader = cmd.ExecuteReader())
                 {
-                    conn.Open();
-
-                    // Query untuk mencocokkan data dengan tabel tb_user di MySQL
-                    string query = "SELECT * FROM tb_user WHERE username = @username AND password = @password";
-                    MySqlCommand cmd = new MySqlCommand(query, conn);
-
-                    // Menggunakan Parameter untuk mencegah peretasan (SQL Injection)
-                    cmd.Parameters.AddWithValue("@username", txtUsername.Text);
-                    cmd.Parameters.AddWithValue("@password", txtPassword.Text);
-
-                    MySqlDataReader reader = cmd.ExecuteReader();
-
-                    if (reader.HasRows) // Jika data cocok dan ditemukan di database
+                    if (!reader.Read())
                     {
-                        reader.Read();
-                        string namaLengkap = reader["nama_lengkap"].ToString();
-                        string hakAkses = reader["role"].ToString();
-
-                        MessageBox.Show("Selamat datang, " + namaLengkap + "!",
-                                        "Login Berhasil", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                        // CEK ROLE (Hak Akses)
-                        if (hakAkses == "Admin")
-                        {
-                            FormMenu menuAdmin = new FormMenu();
-                            menuAdmin.Show();
-                        }
-                        else if (hakAkses == "Kasir")
-                        {
-                            FormKasir mejaKasir = new FormKasir();
-                            mejaKasir.Show();
-                        }
-
-                        this.Hide(); // Sembunyikan layar login
+                        // Username tidak ditemukan. Tetap lanjut verifikasi dummy
+                        // agar waktu respons tidak membocorkan keberadaan username.
+                        PasswordHasher.Verify(password, PasswordHasher.Hash("dummy"));
+                        TampilkanLoginGagal();
+                        return;
                     }
-                    else
-                    {
-                        MessageBox.Show("Username atau Password salah!", "Login Gagal", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        txtPassword.Clear();
-                        txtUsername.Focus();
-                    }
+
+                    idUser = reader.GetInt32("id_user");
+                    passwordTersimpan = reader["password"]?.ToString() ?? string.Empty;
+                    namaLengkap = reader["nama_lengkap"]?.ToString() ?? username;
+                    role = reader["role"]?.ToString() ?? string.Empty;
+                }
+
+                // Verifikasi password (mendukung hash baru dan password lama)
+                if (!PasswordHasher.Verify(password, passwordTersimpan))
+                {
+                    TampilkanLoginGagal();
+                    return;
+                }
+
+                // Password lama (plain text) otomatis di-upgrade menjadi hash.
+                if (!PasswordHasher.IsHashed(passwordTersimpan))
+                {
+                    UpgradePasswordHash(conn, idUser, password);
+                }
+
+                // Role yang tidak dikenal ditolak agar tidak ada akses tanpa hak.
+                if (!SessionIsRoleValid(role))
+                {
+                    MessageBox.Show(
+                        "Akun Anda tidak memiliki role yang valid. Hubungi administrator.",
+                        "Akses Ditolak",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    return;
+                }
+
+                Session.Set(idUser, username, namaLengkap, role);
+
+                MessageBox.Show(
+                    "Selamat datang, " + namaLengkap + "!",
+                    "Login Berhasil",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+
+                // Sembunyikan layar login lalu buka form sesuai role.
+                Hide();
+
+                if (Session.IsAdmin)
+                {
+                    new FormMenu().Show();
+                }
+                else
+                {
+                    new FormKasir { IsRootForm = true }.Show();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Terjadi kesalahan sistem: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(
+                    "Terjadi kesalahan sistem: " + ex.Message,
+                    "Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
         }
 
-        private void Form1_Load_1(object sender, EventArgs e)
+        private static bool SessionIsRoleValid(string role)
         {
+            return string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(role, "Kasir", StringComparison.OrdinalIgnoreCase);
+        }
 
+        private void TampilkanLoginGagal()
+        {
+            MessageBox.Show(
+                "Username atau Password salah!",
+                "Login Gagal",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            txtPassword.Clear();
+            txtUsername.Focus();
+            txtUsername.SelectAll();
+        }
+
+        /// <summary>
+        /// Menyimpan ulang password dalam bentuk hash PBKDF2.
+        /// Kegagalan upgrade tidak menggagalkan login.
+        /// </summary>
+        private static void UpgradePasswordHash(MySqlConnection conn, int idUser, string password)
+        {
+            try
+            {
+                using MySqlCommand cmd = new(
+                    "UPDATE tb_user SET password = @password WHERE id_user = @id", conn);
+                cmd.Parameters.AddWithValue("@password", PasswordHasher.Hash(password));
+                cmd.Parameters.AddWithValue("@id", idUser);
+                cmd.ExecuteNonQuery();
+            }
+            catch
+            {
+                // Tidak fatal: user tetap bisa login, coba lagi lain kali.
+            }
+        }
+
+        private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            // Bila form login ditutup tanpa login (mis. menekan tombol X
+            // di taskbar), pastikan aplikasi benar-benar berhenti.
+            if (!_sedangKeluar && !Session.IsLoggedIn)
+            {
+                _sedangKeluar = true;
+                Application.Exit();
+            }
         }
     }
 }

@@ -150,7 +150,7 @@
             Name = "Form1";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "Login - Kasir SMK N 4";
-            Load += Form1_Load_1;
+            Load += Form1_Load;
             panelHeader.ResumeLayout(false);
             panelHeader.PerformLayout();
             panelCard.ResumeLayout(false);

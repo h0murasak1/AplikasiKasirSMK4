@@ -1,35 +1,47 @@
-﻿using System;
-using System.Windows.Forms;
-using MySql.Data.MySqlClient; // Memanggil library MySQL yang baru saja diinstal
+﻿using MySql.Data.MySqlClient;
 
-namespace AplikasiKasirSMK4 // Sesuaikan dengan nama namespace/project Anda
+namespace AplikasiKasirSMK4
 {
-    class Koneksi
+    /// <summary>
+    /// Class untuk mengelola koneksi ke database MySQL.
+    /// Connection string dibaca dari appsettings.json (lihat AppConfig.cs).
+    /// </summary>
+    public class Koneksi
     {
-        // Pengaturan koneksi standar XAMPP (User: root, Password: kosong)
-        string connectionString = "Server=localhost;Database=db_kasir_smk4;Uid=root;Pwd=;";
-        MySqlConnection conn;
+        private readonly string _connectionString;
 
-        // Fungsi utama untuk memanggil koneksi ke database
-        public MySqlConnection GetConn()
+        public Koneksi()
         {
-            conn = new MySqlConnection(connectionString);
-            return conn;
+            _connectionString = AppConfig.GetConnectionString();
         }
 
-        // Fungsi khusus untuk mengetes apakah koneksi berhasil atau gagal
-        public void CekKoneksi()
+        public string ConnectionString => _connectionString;
+
+        /// <summary>
+        /// Mengembalikan objek koneksi baru. Selalu gunakan pola "using".
+        /// </summary>
+        public MySqlConnection GetConn()
+        {
+            return new MySqlConnection(_connectionString);
+        }
+
+        /// <summary>
+        /// Menguji koneksi tanpa menampilkan MessageBox, agar pemanggil
+        /// bisa menentukan sendiri cara menampilkan hasilnya.
+        /// </summary>
+        public bool TestConnection(out string pesanError)
         {
             try
             {
-                conn = new MySqlConnection(connectionString);
+                using MySqlConnection conn = new(_connectionString);
                 conn.Open();
-                MessageBox.Show("Koneksi ke Database MySQL Berhasil!", "Informasi", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                conn.Close();
+                pesanError = string.Empty;
+                return true;
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Koneksi Gagal. Pastikan XAMPP menyala!\n\nDetail Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                pesanError = ex.Message;
+                return false;
             }
         }
     }
