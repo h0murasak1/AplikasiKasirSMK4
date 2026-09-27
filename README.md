@@ -264,5 +264,5 @@ KASIR_SMK4/
 
 ## 📜 Lisensi & Hak Cipta
 
-Hak Cipta © 2024 **SMK Negeri 4 Kabupaten Tangerang**.  
+Hak Cipta © 2026 **SMK Negeri 4 Kabupaten Tangerang**.  
 Dikembangkan untuk sistem kasir offline mandiri di lingkungan sekolah dan unit produksi SMK Negeri 4.
