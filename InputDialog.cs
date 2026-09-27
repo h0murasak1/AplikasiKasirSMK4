@@ -39,11 +39,11 @@ namespace AplikasiKasirSMK4
                 Text = nilaiAwal,
                 TextAlign = HorizontalAlignment.Right,
             };
-            bool isFormatting = false;
-            _txtNilai.TextChanged += (_, _) =>
-            {
-                InputHelper.FormatRibuanOtomatis(_txtNilai, ref isFormatting);
-            };
+            // Dialog ini khusus untuk mengoreksi qty, jadi isinya dikunci ke
+            // angka bulat sejak ketikan pertama. Format ribuan otomatis
+            // sengaja tidak dipakai: dulu "1,5" dibuang komainya menjadi
+            // "15" tanpa pesan, sehingga qty jadi sepuluh kali lipat.
+            _txtNilai.KeyPress += (_, e) => e.Handled = !InputHelper.BolehMasukAngka(e.KeyChar);
             _txtNilai.SelectAll();
 
             Label lblBantuan = new()
@@ -79,7 +79,7 @@ namespace AplikasiKasirSMK4
             CancelButton = btnBatal;
         }
 
-        /// <summary>Isi yang diketik pengguna, sudah dibersihkan dari spasi.</summary>
+        /// <summary>Isi yang diketik pengguna, tanpa spasi di tepi.</summary>
         public string Nilai => _txtNilai.Text.Trim();
 
         /// <summary>

@@ -1,4 +1,4 @@
-using MySql.Data.MySqlClient;
+using Microsoft.Data.Sqlite;
 
 namespace AplikasiKasirSMK4
 {
@@ -10,23 +10,83 @@ namespace AplikasiKasirSMK4
         public Form1()
         {
             InitializeComponent();
+            UiThemeHelper.TerapkanIkon(this);
             FormClosing += Form1_FormClosing;
+
+            txtUsername.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Enter)
+                {
+                    e.SuppressKeyPress = true;
+                    if (txtPassword.Text.Length > 0)
+                    {
+                        btnLogin_Click(btnLogin, EventArgs.Empty);
+                    }
+                    else
+                    {
+                        txtPassword.Focus();
+                    }
+                }
+            };
+
+            txtPassword.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Enter)
+                {
+                    e.SuppressKeyPress = true;
+                    btnLogin_Click(btnLogin, EventArgs.Empty);
+                }
+            };
         }
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            UiThemeHelper.TerapkanIkon(this);
+
+            // Muat logo sekolah ke PictureBox
+            Image? logo = UiThemeHelper.AmbilLogoSekolah();
+            if (logo != null)
+            {
+                picLogo.Image = logo;
+            }
+
+            // Skema database dibentuk otomatis saat pertama kali aplikasi
+            // dijalankan, jadi tidak ada tombol "install" dan tidak perlu
+            // menyiapkan apa pun lebih dulu. Kegagalan di sini berarti
+            // folder aplikasi tidak bisa ditulis, dan itu memang perlu
+            // diketahui sekarang, bukan saat kasir menekan tombol.
+            try
+            {
+                Database.PastikanTerpasang(_koneksi);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Database belum bisa disiapkan.\n\n"
+                    + "Lokasi berkas: " + _koneksi.PathDatabase + "\n\n"
+                    + "Detail Error: " + ex.Message,
+                    "Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                return;
+            }
+
             if (!_koneksi.TestConnection(out string pesanError))
             {
                 MessageBox.Show(
-                    "Koneksi Gagal. Pastikan XAMPP/MySQL sudah berjalan!\n\n"
+                    "Koneksi Gagal.\n\n"
+                    + "Lokasi berkas: " + _koneksi.PathDatabase + "\n\n"
                     + "Detail Error: " + pesanError,
                     "Error",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
+                return;
             }
 
             txtUsername.Focus();
         }
+
+
 
         private void btnLogin_Click(object sender, EventArgs e)
         {
@@ -46,10 +106,9 @@ namespace AplikasiKasirSMK4
 
             try
             {
-                using MySqlConnection conn = _koneksi.GetConn();
-                conn.Open();
+                using SqliteConnection conn = _koneksi.GetConn();
 
-                using MySqlCommand cmd = new(
+                using SqliteCommand cmd = new(
                     "SELECT id_user, password, nama_lengkap, role, is_active "
                     + "FROM tb_user WHERE username = @username LIMIT 1",
                     conn);
@@ -61,7 +120,7 @@ namespace AplikasiKasirSMK4
                 string role;
                 bool akunAktif;
 
-                using (MySqlDataReader reader = cmd.ExecuteReader())
+                using (SqliteDataReader reader = cmd.ExecuteReader())
                 {
                     if (!reader.Read())
                     {
@@ -72,7 +131,7 @@ namespace AplikasiKasirSMK4
                         return;
                     }
 
-                    idUser = reader.GetInt32("id_user");
+                    idUser = InputHelper.AmbilInt(reader["id_user"]);
                     passwordTersimpan = reader["password"]?.ToString() ?? string.Empty;
                     namaLengkap = reader["nama_lengkap"]?.ToString() ?? username;
                     role = reader["role"]?.ToString() ?? string.Empty;
@@ -168,11 +227,11 @@ namespace AplikasiKasirSMK4
         /// Menyimpan ulang password dalam bentuk hash PBKDF2.
         /// Kegagalan upgrade tidak menggagalkan login.
         /// </summary>
-        private static void UpgradePasswordHash(MySqlConnection conn, int idUser, string password)
+        private static void UpgradePasswordHash(SqliteConnection conn, int idUser, string password)
         {
             try
             {
-                using MySqlCommand cmd = new(
+                using SqliteCommand cmd = new(
                     "UPDATE tb_user SET password = @password WHERE id_user = @id", conn);
                 cmd.Parameters.AddWithValue("@password", PasswordHasher.Hash(password));
                 cmd.Parameters.AddWithValue("@id", idUser);

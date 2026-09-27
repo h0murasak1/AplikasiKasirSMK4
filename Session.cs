@@ -9,6 +9,7 @@ namespace AplikasiKasirSMK4
         public static int UserId { get; private set; }
         public static string Username { get; private set; } = string.Empty;
         public static string FullName { get; private set; } = string.Empty;
+        public static string NamaLengkap => FullName;
         public static string Role { get; private set; } = string.Empty;
 
         public static bool IsLoggedIn => UserId > 0;

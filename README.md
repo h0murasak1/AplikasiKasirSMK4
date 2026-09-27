@@ -12,14 +12,16 @@ Aplikasi Point of Sale (POS) / mesin kasir berbasis **Windows Forms (C#)** untuk
 - [Prasyarat Instalasi](#prasyarat-instalasi)
 - [Setup Database](#setup-database)
 - [Struktur Tabel](#struktur-tabel)
-- [Konfigurasi Koneksi](#konfigurasi-koneksi)
+- [Konfigurasi Database](#konfigurasi-database)
 - [Cara Menjalankan](#cara-menjalankan)
 - [Akun Default](#akun-default)
 - [Alur Penggunaan](#alur-penggunaan)
 - [Struktur Proyek](#struktur-proyek)
 - [Detail Perubahan Data](#detail-perubahan-data)
+- [Tahap 1: Dari MySQL ke SQLite](#tahap-1-dari-mysql-ke-sqlite)
+- [Cadangan dan Pemulihan](#cadangan-dan-pemulihan)
 - [Ringkasan Perbaikan](#ringkasan-perbaikan)
-- [Restrukturasi Database](#restrukturasi-database)
+- [Restrukturasi Database (zaman MySQL)](#restrukturasi-database-zaman-mysql)
 - [Ide Pengembangan](#ide-pengembangan)
 - [Lisensi](#lisensi)
 
@@ -27,7 +29,9 @@ Aplikasi Point of Sale (POS) / mesin kasir berbasis **Windows Forms (C#)** untuk
 
 ## Tentang Aplikasi
 
-Aplikasi kasir ini dibuat sebagai proyek untuk keperluan penjualan barang di lingkungan SMK Negeri 4. Dirancang dengan pendekatan sederhana: satu aplikasi desktop yang terhubung langsung ke database MySQL lokal (XAMPP), tanpa perlu server tambahan.
+Aplikasi kasir ini dibuat sebagai proyek untuk keperluan penjualan barang di lingkungan SMK Negeri 4. Dirancang dengan pendekatan sederhana: satu aplikasi desktop dengan seluruh datanya di dalam **satu berkas** `kasir.db` di samping executable, tanpa perlu server database, tanpa XAMPP, dan tanpa service yang harus dijalankan.
+
+Seluruh folder aplikasi bisa disalin ke flashdisk, dijalankan dari sana, lalu dicabut setelah aplikasi ditutup. Membuat cadangan cukup menyalin satu berkas, bukan satu folder berisi puluhan ribu file.
 
 Lima layar utama yang tersedia:
 
@@ -77,7 +81,11 @@ Lengkap dengan operasi CRUD untuk tabel `tb_barang`:
 - **Bersihkan**: mengosongkan seluruh kolom input dan membuka kembali kunci kode barcode.
 
 Validasi: kode, nama, harga jual, dan stok wajib diisi sebelum disimpan.
-Stok boleh pecahan karena `stok` sudah bertipe `DECIMAL(15,2)`.
+Stok hanya menerima **bilangan bulat** per satuan, misalnya `10` pcs. Kolomnya
+memang bertipe `NUMERIC` di database, tapi input dari keyboard dikunci digit
+saja; koma dan titik tidak bisa diketik sama sekali. Alasannya, kesalahan
+"1,5" yang terbaca "15" adalah 15 kali lipat, dan terlalu berbahaya untuk
+dibiarkan lewat tebakan.
 
 ### 4. Mesin Kasir dan Transaksi
 
@@ -86,8 +94,9 @@ Stok boleh pecahan karena `stok` sudah bertipe `DECIMAL(15,2)`.
 - **Keranjang belanja**: kolom Kode, Nama Barang, Harga, Qty, Subtotal.
   - Jika barcode yang sama di-scan berulang, **qty otomatis bertambah** tanpa membuat baris baru.
 - **Ubah jumlah dengan klik kanan**: klik kanan pada baris keranjang untuk membuka
-  menu **Ubah Jumlah...** atau **Hapus Item**. Menu ubah jumlah menerima pecahan,
-  misalnya `0,5` kg, sekaligus memeriksa ulang stok terbaru dari database.
+  menu **Ubah Jumlah...** atau **Hapus Item**. Menu ubah jumlah hanya menerima
+  bilangan bulat, dan sekaligus memeriksa ulang stok terbaru dari database.
+  Pecahan ditolak dengan pesan yang menyebutkan berapa yang sebenarnya diketik.
 - **Total belanja**: dihitung otomatis setiap kali keranjang berubah. Subtotal
   dibulatkan ke 2 desimal agar angka di layar sama persis dengan yang tersimpan.
 - **Kembalian otomatis**: dihitung realtime saat uang bayar diketik.
@@ -109,12 +118,16 @@ Stok boleh pecahan karena `stok` sudah bertipe `DECIMAL(15,2)`.
 | Bahasa | C# |
 | Framework | .NET 10 (`net10.0-windows`) |
 | UI | Windows Forms (WinForms) |
-| Database | MySQL / MariaDB (via XAMPP) |
-| Connector | `MySql.Data` 26.7.0 |
+| Database | **SQLite** (satu berkas, tanpa server) |
+| Connector | `Microsoft.Data.Sqlite` 10.0.12 (SQLite 3.53.3) |
 | UI Library | `ReaLTaiizor` 3.8.2.1 (tema `HopeButton`) |
 | IDE | Visual Studio 2022 / Visual Studio Code |
 
 Tidak ada paket tambahan untuk hashing: password memakai **PBKDF2-SHA256** yang sudah tersedia di .NET.
+
+Tidak ada lagi MySQL, MariaDB, XAMPP, Workbench, `mysql.exe`, username, password
+database, port 3306, maupun service yang harus dijalankan. Seluruh data ada di
+satu berkas bernama `data/kasir.db`.
 
 ---
 
@@ -124,62 +137,86 @@ Sebelum menjalankan aplikasi, pastikan sudah tersedia:
 
 1. **Windows 10/11** (aplikasi ini hanya berjalan di Windows).
 2. **[.NET 10 SDK](https://dotnet.microsoft.com/download)** untuk proses build.
-3. **[XAMPP](https://www.apachefriends.org/)** untuk menjalankan service MySQL.
-4. **MySQL Workbench** (opsional) bila ingin mengelola database secara graphical.
-5. **Barcode scanner USB** (opsional) untuk transaksi cepat. Kode barcode juga dapat diketik secara manual.
+   Untuk menjalankan hasil build yang sudah jadi, cukup
+   [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download).
+3. **Barcode scanner USB** (opsional) untuk transaksi cepat. Kode barcode juga dapat diketik secara manual.
+
+> **Kalau akan memakai flashdisk FAT32:** SQLite tidak boleh memakai
+> `journal_mode=WAL`, karena FAT32 tidak mendukung file journal dan
+> file locking-nya tidak lengkap. Aplikasi ini tidak pernah menyalakan WAL,
+> dan memakai `Cache=Private` supaya tidak muncul berkas `-wal` maupun `-shm`.
+> Jangan menggantinya dengan WAL.
 
 ---
 
 ## Setup Database
 
-### 1. Jalankan XAMPP
+### Tidak ada langkah setup sama sekali
 
-Buka **XAMPP Control Panel**, lalu klik **Start** pada modul **MySQL**. Modul Apache tidak diperlukan untuk aplikasi ini.
+Skema database dibentuk sendiri oleh aplikasi saat pertama kali dibuka.
+Tidak ada perintah yang perlu dijalankan, tidak ada akun database yang perlu
+dibuat, dan tidak ada tool eksternal yang perlu dipasang.
 
-### 2. Pasang skema database
+Yang terjadi pada proses startup:
 
-Seluruh struktur tabel, constraint, index, dan data contoh sudah tersedia di satu berkas:
-**`skema_database.sql`**. Jalankan berkas itu, tidak perlu menulis query sendiri.
+1. `AppConfig` menentukan path berkas database (lihat
+   [Konfigurasi Database](#konfigurasi-database)) dan membuat folder induknya
+   bila belum ada.
+2. `Database.PastikanTerpasang` membaca berkas `skema.sqlite.sql` yang ikut
+   disertakan, memecahnya menjadi 20 perintah SQL, lalu menjalankannya
+   **di dalam satu transaksi**. Kalau ada perintah yang gagal, tidak ada
+   tabel yang tertinggal setengah jadi.
+3. `tb_user` masih kosong, jadi satu akun admin dibuat memakai salt acak.
 
-**Cara A — phpMyAdmin**
+Akun admin bawaan:
 
-1. Buka `http://localhost/phpmyadmin`.
-2. Klik tab **Import** di menu atas.
-3. Klik **Choose File**, pilih `skema_database.sql`.
-4. Pastikan **Character set of the file** = `utf-8`.
-5. Klik **Go** di bagian bawah.
+| Username | Password | Role |
+|---|---|---|
+| `admin` | `admin123` | `Admin` |
 
-**Cara B — Command Line (PowerShell)**
+> **GANTI password `admin123` sebelum dipakai di kasir sungguhan.**
 
-```powershell
-cmd /c "C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 < skema_database.sql"
+### Verifikasi cepat
+
+Jalankan aplikasi sekali, lalu pastikan folder `data` muncul di samping
+berkas `.exe`:
+
+```
+data/
+└── kasir.db        <-- satu-satunya berkas. Tidak ada -wal atau -shm.
 ```
 
-> PowerShell tidak mendukung operator `<` untuk redirect. Karena itu perintah
-> di atas dibungkus dengan `cmd /c`. Kalau `mysql.exe` ada di lokasi lain,
-> sesuaikan jalurnya.
+Kalau `data` tidak muncul, berarti folder aplikasi tidak bisa ditulis.
+Pesan errornya sudah ditampilkan di layar bersama lokasi berkasnya.
 
-**Cara C — MySQL Workbench**
+### Memasang skema secara manual (opsional)
 
-1. Buka Workbench, hubungkan ke `localhost` dengan user `root` tanpa password.
-2. Klik **File > Open SQL Script**, pilih `skema_database.sql`.
-3. Klik Execute (bolt).
+Kalau ingin membuat `kasir.db` tanpa membuka aplikasi, misalnya untuk
+menyiapkan data contoh sebelum diserahkan ke kasir:
 
-Selesai. Database `db_kasir_smk4`, 5 tabel, 2 view, dan 3 barang contoh sudah siap.
+```bash
+sqlite3 data/kasir.db < skema.sqlite.sql
+```
 
-### 3. Kalau database Anda sudah ada (versi lama)
+Perintah ini hanya membuat tabel. Akun admin **tidak** ikut, karena hash
+password-nya sengaja tidak ditulis mati di dalam berkas SQL: siapa pun yang
+membaca berkas itu bisa mengambil hash-nya lalu mencobanya secara offline.
+Jalankan aplikasi sekali setelahnya, dan `admin` akan dibuat otomatis.
 
-**Jangan** jalankan `skema_database.sql` pada database yang sudah berisi data, karena
-skrip tersebut akan gagal. Jalankan migrasi berikut sesuai urutannya:
+### Kalau Anda masih punya database MySQL lama
 
-| Urutan | Berkas | Isi |
-|---|---|---|
-| 1 | `migration_pecahan.sql` | Nominal `INT` jadi `DECIMAL(15,2)` |
-| 2 | `migration_restruktur.sql` | Foreign key, index, check constraint, snapshot, mutasi stok, soft delete, satuan, qty pecahan |
-| 3 | `migration_id_unsigned.sql` | Menyamakan tipe kolom ID jadi `UNSIGNED` |
+Data lama **tidak** dimigrasi. Aplikasi yang sudah dipindah ke SQLite mulai dari
+nol, jadi tidak ada yang perlu dikonversi.
 
-Backup pra-migrasi tersimpan di folder `backup/`. Lihat bagian
-[Restrukturasi Database](#restrukturasi-database) untuk penjelasan detailnya.
+Skrip migrasi MySQL dan dump `mysqldump`-nya **sudah dihapus** dari folder
+proyek pada 28 September 2026. Kalau datanya masih Anda perlukan, ekspor
+**sekarang juga**, selagi XAMPP masih ada di komputer itu:
+
+```bash
+mysqldump -u root --default-character-set=utf8mb4 db_kasir_smk4 > arsip_lama.sql
+```
+
+Setelah XAMPP dihapus, data lama tidak bisa dibaca lagi tanpa reinstall MySQL.
 
 ---
 
@@ -302,35 +339,66 @@ Ini jawaban atas pertanyaan "kenapa stok barang 123 berubah?".
 
 ---
 
-## Konfigurasi Koneksi
+## Konfigurasi Database
 
-Credential database **tidak lagi ditulis di dalam kode C#**. Pengaturannya dibaca dari file
-**`appsettings.json`** yang otomatis ikut tersalin ke folder output saat build.
+Tidak ada lagi username, password, host, atau port. Yang dikonfigurasi hanyalah
+**path berkas database**, dibaca dari `appsettings.json` yang ikut tersalin ke
+folder output saat build.
 
 ```json
 {
-  "ConnectionStrings": {
-    "MySql": "Server=localhost;Database=db_kasir_smk4;Uid=root;Pwd=;"
+  "Database": {
+    "Path": "data\\kasir.db"
   }
 }
 ```
 
-| Bagian | Arti | Nilai standar XAMPP |
+| Bagian | Arti | Nilai standar |
 |---|---|---|
-| `Server` | Alamat server MySQL | `localhost` |
-| `Database` | Nama database | `db_kasir_smk4` |
-| `Uid` | Username MySQL | `root` |
-| `Pwd` | Password MySQL | (kosong) |
+| `Database.Path` | Path ke berkas `.db`, relatif terhadap folder aplikasi | `data\kasir.db` |
+
+Path relatif selalu diselesaikan terhadap folder berkas `.exe`, jadi seluruh
+folder aplikasi bisa disalin ke flashdisk dan langsung jalan.
 
 Urutan pembacaan konfigurasi:
 
-1. Environment variable `KASIR_SMK4_CONNECTION` (takes precedence, berguna untuk testing).
-2. File `appsettings.json` di folder aplikasi.
-3. Nilai bawaan `localhost` / `db_kasir_smk4` / `root` / kosong.
+1. Environment variable `KASIR_SMK4_DB` (path penuh ke berkas `.db`;
+   menang atas berkas konfigurasi, berguna untuk pengujian).
+2. `appsettings.json` di folder aplikasi.
+3. Nilai bawaan `data/kasir.db` di samping berkas executable.
 
-Saat aplikasi pertama kali dibuka, `Form1_Load` otomatis menjalankan pengecekan koneksi. Jika
-berhasil akan muncul MessageBox "Koneksi ke Database MySQL Berhasil!". Jika gagal, aplikasi tetap
-terbuka namun transaksi tidak dapat dilakukan, jadi pastikan MySQL sudah berjalan.
+> Environment variable **`KASIR_SMK4_CONNECTION` sudah tidak berlaku**. Yang
+> menggantikannya adalah `KASIR_SMK4_DB`, dan isinya bukan connection string
+> melainkan path ke berkas.
+
+### Connection string yang dihasilkan
+
+`AppConfig.GetConnectionString()` menyusunnya sendiri. Dua bagiannya wajib
+dipixelkan:
+
+| Bagian | Nilai | Alasan |
+|---|---|---|
+| `Data Source` | path absolut ke `kasir.db` | satu berkas, tanpa server |
+| `Pooling` | `False` | dengan pooling, berkas tetap terkunci beberapa detik setelah aplikasi ditutup, dan berkas yang terkunci tidak bisa disalin ke flashdisk |
+| `Cache` | `Private` | mencegah SQLite membuat berkas `-wal` / `-shm` di samping database |
+| `Mode` | `ReadWriteCreate` | membuat `kasir.db` otomatis saat pertama kali dijalankan |
+| `Foreign Keys` | `True` | batasan referensial aktif (see catatan di bawah) |
+
+### PRAGMA per-koneksi
+
+`Koneksi.GetConn()` menjalankan dua PRAGMA pada **setiap** koneksi yang dibuat,
+bukan sekali di awal aplikasi. PRAGMA bersifat per-koneksi, jadi kalau hanya
+dipasang sekali, koneksi berikutnya kembali ke bawaan.
+
+| PRAGMA | Nilai | Alasan |
+|---|---|---|
+| `foreign_keys` | `ON` | tanpa ini, penghapusan barang meninggalkan mutasi dan nota yatim |
+| `recursive_triggers` | `OFF` | trigger cap waktu melakukan UPDATE ke tabelnya sendiri; kalau nyala akan memanggil dirinya sendiri tanpa henti |
+| `busy_timeout` | 5000 ms | menahan sebentar saat berkas sedang dipakai proses lain, supaya flashdisk lambat tidak langsung gagal |
+
+Karena PRAGMA hanya berlaku pada koneksi tempat ia dijalankan, **semua akses
+ke database wajib lewat `Koneksi.GetConn()`**. Koneksi yang dibuat langsung
+dengan `new SqliteConnection(...)` tidak punya setelan tersebut.
 
 ### Password User
 
@@ -352,8 +420,10 @@ Jadi Anda **tidak perlu** mengacak ulang seluruh password secara manual.
 ### Opsi A: Visual Studio
 
 1. Buka folder proyek, klik dua kali `AplikasiKasirSMK4.slnx`.
-2. Pastikan MySQL (XAMPP) sudah berjalan.
-3. Tekan **Ctrl + F5** (Start Without Debugging) atau klik tombol Run.
+2. Tekan **Ctrl + F5** (Start Without Debugging) atau klik tombol Run.
+
+Tidak ada layanan yang perlu dijalankan lebih dulu. `data\kasir.db` dibuat
+otomatis saat jendela login tampil.
 
 ### Opsi B: Command Line (dotnet CLI)
 
@@ -368,13 +438,37 @@ dotnet build
 dotnet run
 ```
 
-### Opsi C: Build ke File EXE
+### Opsi C: Publish ke Folder Siap Salin ke Flashdisk
 
 ```bash
 dotnet publish -c Release -r win-x64 --self-contained false
 ```
 
-File executable akan tersedia di folder `bin\Release\net10.0-windows\win-x64\`.
+Folder hasil publish di `bin\Release\net10.0-windows\win-x64\` bisa langsung
+disalin ke flashdisk. Yang perlu ikut disalin:
+
+- semua `.exe` dan `.dll`
+- `skema.sqlite.sql`
+- `appsettings.json`
+- folder `runtimes\win-x64\native\e_sqlite3.dll`
+
+> **Jangan lupa `runtimes\`.** Driver SQLite memuat pustaka native
+> `e_sqlite3.dll`. Folder `runtimes` bawaan hasil `dotnet build` juga berisi
+> pustaka untuk Linux, macOS, dan ARM, yang tidak pernah dipakai. Setelah
+> publish, hapus semua isi `runtimes\` kecuali `win-x64` supaya ukuran folder
+> turun dari sekitar 20 MB menjadi sekitar 2 MB.
+
+### Menjalankan dari flashdisk
+
+1. Salin folder hasil publish ke flashdisk.
+2. Jalankan `AplikasiKasirSMK4.exe` dari flashdisk.
+3. Folder `data` dibuat otomatis di samping executable, dan `kasir.db` muncul
+   di sana.
+
+Tidak ada yang perlu diinstal, dan flashdisk boleh dilepas saat aplikasi
+menutup. `Pooling=False` pada connection string memastikan berkas `kasir.db`
+tidak terkunci setelah jendela ditutup, jadi flashdisk bisa langsung dicabut
+atau `kasir.db` bisa langsung disalin sebagai cadangan.
 
 ---
 
@@ -383,14 +477,28 @@ File executable akan tersedia di folder `bin\Release\net10.0-windows\win-x64\`.
 | Username | Password | Role | Akses |
 |---|---|---|---|
 | `admin` | `admin123` | Admin | Dashboard admin: kelola barang, buka kasir, laporan penjualan, logout |
-| `kasir` | `kasir123` | Kasir | Langsung diarahkan ke mesin kasir (`FormKasir`) untuk melayani transaksi |
 
-> **Ganti password ini sebelum aplikasi dipakai di lingkungan produksi.**
-> Password default di atas berupa teks biasa. Begitu login berhasil pertama kali,
-> aplikasi otomatis mengubahnya menjadi hash PBKDF2-SHA256.
+> **Ganti password `admin123` sebelum aplikasi dipakai di kasir sungguhan.**
 
-Role yang diterima database hanya `Admin` dan `Kasir`. Nilai lain akan ditolak
-oleh `chk_user_role`.
+Hanya satu akun yang dibuat otomatis, yaitu `admin`. Akun kasir dibuat dari
+dalam aplikasi lewat menu **Kelola User**, tidak lagi ditanam bersama
+database. Akun `kasir` / `kasir123` yang ada di versi MySQL **tidak** ikut,
+karena data lama tidak dimigrasi.
+
+Password tidak disimpan sebagai teks biasa melainkan sebagai hash
+**PBKDF2-SHA256** bersalt acak, 100.000 iterasi, dengan format:
+
+```
+PBKDF2$iterasi$saltBase64$hashBase64
+```
+
+Karena hash memakai salt acak, akun `admin` di dua instalasi berbeda tidak
+memiliki hash yang sama, sehingga satu `kasir.db` yang bocor tidak langsung
+membuka password instalasi lain.
+
+Role yang diterima database hanya `Admin` dan `Kasir`. Nilai lain ditolak
+oleh CHECK constraint `chk_user_role`. Daftar ini harus selalu sama dengan
+`Session.IsRoleValid()` di `Form1.cs`.
 
 ---
 
@@ -401,7 +509,7 @@ Buka Aplikasi
      |
      v
 +-----------------+
-|  Layar LOGIN   |   <-- cek koneksi MySQL otomatis
+|  Layar LOGIN   |   <-- pastikan skema terpasang otomatis
 |    (Form1)      |
 +--------+--------+
          | login berhasil
@@ -479,17 +587,20 @@ Akun yang dinonaktifkan akan ditolak saat login dengan pesan
 KASIR_SMK4/
 |-- AplikasiKasirSMK4.slnx          # Solution file
 |-- AplikasiKasirSMK4.csproj        # Project file (.NET 10, WinForms)
-|-- appsettings.json                # Konfigurasi connection string
-|-- skema_database.sql              # SKEMA LENGKAP untuk instalasi baru
-|-- migration_pecahan.sql           # Migrasi: nominal INT jadi DECIMAL(15,2)
-|-- migration_restruktur.sql        # Migrasi: FK, index, check, snapshot, mutasi
-|-- migration_id_unsigned.sql       # Migrasi: samakan tipe kolom ID
+|-- appsettings.json                # Konfigurasi path berkas database
+|-- skema.sqlite.sql                # SKEMA AKTIF. Dipakai aplikasi saat instalasi.
 |-- README.md                       # Dokumentasi ini
-|-- backup/                         # Backup database sebelum migrasi
+|-- backup/                         # Hanya snapshot kode, bukan dump database
+|   `-- snapshots/                  # Salinan kode sebelum tiap perubahan besar
+|       |-- tahap1_awal_20260927_232511/    # 30 berkas, kondisi pra-Tahap-1
+|       `-- tahap1_final_20260928_002410/   # 25 berkas + CATATAN.txt
 |
 |-- Program.cs                      # Entry point + penanganan error global
-|-- Koneksi.cs                      # Class koneksi MySQL dan tes koneksi
-|-- AppConfig.cs                    # Pembacaan appsettings.json
+|-- Koneksi.cs                      # Koneksi SQLite + PRAGMA wajib per-koneksi
+|-- AppConfig.cs                    # Penentuan path berkas database
+|-- Database.cs                     # Installer skema + pemicu updated_at + seed admin
+|-- QueryHelper.cs                  # Pengganti MySqlDataAdapter
+|-- SqliteError.cs                  # Kategori galat: Unik, Check, ForeignKey, Null
 |-- Session.cs                      # Data user yang sedang login
 |-- PasswordHasher.cs               # Hashing password PBKDF2-SHA256
 |-- InputHelper.cs                  # Validasi dan format input nominal
@@ -527,9 +638,13 @@ KASIR_SMK4/
 
 ### 1. `Koneksi.cs` - Manajemen Koneksi
 
-- `GetConn()`: mengembalikan objek `MySqlConnection` baru. Dipanggil dengan pola `using` di setiap form agar koneksi otomatis ditutup.
+- `GetConn()`: mengembalikan objek `SqliteConnection` baru, lengkap dengan
+  PRAGMA yang sudah dijalankan. Dipanggil dengan pola `using` di setiap form
+  agar koneksi otomatis ditutup. **Tidak boleh diganti `new SqliteConnection`
+  langsung**, karena PRAGMA hanya berlaku pada koneksi tempat dijalankan.
 - `TestConnection(out string pesanError)`: mencoba membuka koneksi dan mengembalikan `true` atau `false` tanpa menampilkan MessageBox, sehingga pemanggil yang menentukan cara menampilkannya.
-- Connection string dibaca dari `appsettings.json` melalui `AppConfig`.
+- Connection string disusun sendiri oleh `AppConfig.GetConnectionString()` dari
+  path berkas. Tidak ada lagi username, password, host, atau port.
 
 ### 2. `Form1.cs` - Autentikasi
 
@@ -565,9 +680,11 @@ FROM tb_user WHERE username = @username LIMIT 1;
 Perlindungan tambahan:
 
 - Kode barcode duplikat dicegah sebelum insert, dengan pesan yang jelas.
-- `MySqlException` dengan nomor 1062 (duplicate key) ditangani khusus.
+- `SqliteException` dengan `ErrorCode = 19` dan `SqliteExtendedErrorCode` 1555
+  (nilai unik) ditangani khusus oleh `SqliteError`.
 - Role non-Admin tidak dapat membuka form ini.
-- Harga dan stok divalidasi sebagai angka, tidak negatif, dan tidak melebihi kapasitas `DECIMAL(15,2)`.
+- Harga dan stok divalidasi sebagai angka, tidak negatif, dan tidak melebihi
+  kapasitas `NUMERIC` (dibatasi dua desimal oleh CHECK `ROUND(x,2) = x`).
 - Bila stok diubah lewat form PERBARUI, selisihnya dicatat ke `tb_mutasi_stok` bertipe `PENYESUAIAN` supaya perubahannya bisa diaudit.
 - **Satuan tidak pernah tertimpa.** Form ini belum punya kolom input satuan, jadi
   `satuan` selalu dibaca ulang dari database lewat `BacaSatuan`. Kalau tidak begitu,
@@ -589,12 +706,16 @@ Perlindungan tambahan:
 | Simpan | `SimpanTransaksi(uangDiterima, kembalian)` | `BEGIN` / `COMMIT` / `ROLLBACK` |
 | Pembulatan | `BulatkanSubtotal` | `Math.Round` 2 desimal, agar layar = database |
 
-**Transaksi database.** Seluruh penyimpanan dibungkus `MySqlTransaction`. Bila satu saja query
-gagal, semua perubahan dibatalkan dan stok tidak akan berkurang sebagian.
+**Transaksi database.** Seluruh penyimpanan dibungkus `SqliteTransaction` yang
+dibuka dengan `BeginTransaction(deferred: false)`, artinya `BEGIN IMMEDIATE`.
+Bila satu saja query gagal, semua perubahan dibatalkan dan stok tidak akan
+berkurang sebagian.
 
-**Penguncian baris.** Sebelum mengurangi stok, aplikasi menjalankan
-`SELECT ... FOR UPDATE` pada baris barang. Ini mencegah race condition ketika dua kasir
-menjual barang yang sama pada saat bersamaan.
+**Penguncian baris.** SQLite tidak punya `SELECT ... FOR UPDATE`. Yang
+dipakai adalah `BeginTransaction(deferred: false)`, yaitu `BEGIN IMMEDIATE`:
+kunci tulis diambil sejak transaksi dibuka, bukan menunggu perintah pertama.
+Ini mencegah race condition ketika dua kasir menjual barang yang sama pada saat
+bersamaan.
 
 **Validasi stok tiga lapis:**
 
@@ -609,11 +730,12 @@ Urutan query saat pembayaran:
 INSERT INTO tb_transaksi (no_nota, id_user, total_bayar, uang_diterima, kembalian)
 VALUES (@noNota, @idUser, @totalBayar, @uangDiterima, @kembalian);
 
--- id_transaksi hasil insert diambil lewat LastInsertedId untuk dipakai di bawah
+-- id_transaksi hasil insert diambil lewat SELECT last_insert_rowid()
+-- pada koneksi yang sama, untuk dipakai di bawah
 
 -- 2. Untuk setiap baris keranjang:
---    a. Cek dan kunci stok
-SELECT nama_barang, stok FROM tb_barang WHERE kode_barcode = @kode FOR UPDATE;
+--    a. Cek stok (kunci sudah dipegang oleh BEGIN IMMEDIATE)
+SELECT nama_barang, stok FROM tb_barang WHERE kode_barcode = @kode;
 
 --    b. Simpan rincian item + snapshot nama & harga saat penjualan
 INSERT INTO tb_detail_transaksi
@@ -692,11 +814,27 @@ Untuk output ada dua format:
 
 ---
 
-## Restrukturasi Database
+## Restrukturasi Database (zaman MySQL)
 
-> **Status: sudah diterapkan.** Skrip tersedia di `migration_restruktur.sql` dan
-> `migration_id_unsigned.sql` bila Anda perlu menjalankannya di instalasi lain.
-> Untuk instalasi baru, cukup pakai `skema_database.sql`.
+> **Status: sudah diterapkan, lalu digantikan, lalu dihapus.**
+> Bagian ini adalah catatan historis tentang perbaikan struktur yang dulu
+> dilakukan di atas MySQL. Skrip yang dipakai waktu itu
+> (`migration_pecahan.sql`, `migration_restruktur.sql`,
+> `migration_id_unsigned.sql`, `skema_database.sql`) dan dump `mysqldump` di
+> folder `backup/` **sudah dihapus** pada 28 September 2026, karena tidak ada
+> lagi yang membutuhkannya.
+>
+> Satu-satunya salinannya masih ada di
+> `backup\snapshots\tahap1_awal_20260927_232511\`, kalau someday benar-benar
+> dibutuhkan untuk menelusuri asal-usul struktur.
+>
+> Untuk instalasi baru, yang dipakai adalah `skema.sqlite.sql`, dan installer
+> membentuknya sendiri saat aplikasi dibuka. Lihat
+> [Tahap 1: Dari MySQL ke SQLite](#tahap-1-dari-mysql-ke-sqlite).
+
+Struktur yang dihasilkan restrukturasi MySQL itu **dipertahankan seluruhnya**
+di skema SQLite: nama tabel, nama kolom, urutannya, 10 index, 5 foreign key,
+CHECK constraint, 2 view, dan 1 trigger. Yang berubah hanya mesinnya.
 
 ### Masalah pada Struktur Lama
 
@@ -860,53 +998,32 @@ nomor ID tidak mungkin bernilai negatif dan konsisten di semua tabel.
 | `tb_detail_transaksi` | `diskon_item` | `int(11) NULL` | `decimal(15,2) NOT NULL` |
 | `tb_mutasi_stok` | *tabel baru* | *tidak ada* | 9 kolom, 2 foreign key |
 
-### Cara Menjalankan Migrasi
+### Cara Menjalankan Migrasi (historis, MySQL)
 
-```powershell
-# WAJIB: backup dulu
-cmd /c "C:\xampp\mysql\bin\mysqldump.exe -u root --default-character-set=utf8mb4 --single-transaction db_kasir_smk4 > backup_sebelum.sql"
+> **Tidak berlaku lagi.** Ketiga skrip migrasi MySQL sudah dihapus dari
+> folder proyek pada 28 September 2026. Aplikasi versi sekarang tidak
+> memerlukannya, dan data lama memang tidak dimigrasi.
+>
+> Untuk data aplikasi sekarang, cadangan cukup berupa **satu berkas**
+> `data\kasir.db`, dan pemulihannya sesederhana menyalin berkas itu kembali ke
+> tempatnya. Lihat [Cadangan dan Pemulihan](#cadangan-dan-pemulihan).
 
-# Lalu jalankan berurutan
-cmd /c "C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 < migration_pecahan.sql"
-cmd /c "C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 < migration_restruktur.sql"
-cmd /c "C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 < migration_id_unsigned.sql"
-```
+### Cara Restore Backup (historis, MySQL)
 
-Ketiganya aman dijalankan berulang kali dan tidak menghapus data.
-
-> **Penting:** `migration_id_unsigned.sql` harus dijalankan **terakhir** dan setelah
-> `migration_restruktur.sql`, karena foreign key tidak boleh diubah selama masih
-> terhubung. Skrip itu sudah menangani urutannya sendiri (drop FK → ubah kolom →
-> buat ulang FK).
-
-### Cara Restore Backup
-
-Berkas di folder `backup/` sengaja dibuat **tanpa** `CREATE DATABASE` dan `USE`,
-supaya bisa dipulihkan ke database dengan nama lain saat diuji. Karena itu
-namanya database harus disebutkan di perintah:
-
-```powershell
-# Restore ke database yang sudah ada
-cmd /c "C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 db_kasir_smk4 < backup\nama_file_backup.sql"
-
-# Atau buat dulu database-nya, baru restore
-cmd /c "C:\xampp\mysql\bin\mysql.exe -u root -e ""CREATE DATABASE db_kasir_smk4 DEFAULT CHARACTER SET utf8mb4"""
-cmd /c "C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 db_kasir_smk4 < backup\nama_file_backup.sql"
-```
+> Berkas dump `mysqldump` yang dulu ada di folder `backup/` juga sudah
+> dihapus. Tidak ada lagi yang perlu dipulihkan dari MySQL.
 
 ### Bukti bahwa Migrasi Benar
 
 Rantai migrasi diuji dari nol, bukan diasumsikan benar:
 
 1. Database `db_uji_migrasi` dibuat dengan memulihkan backup struktur lama
-   (`backup/db_kasir_smk4_sebelum_restruktur_*.sql`) yang isinya 4 tabel tanpa
-   foreign key.
+   (4 tabel tanpa foreign key).
 2. Ketiga skrip migrasi dijalankan berurutan. Semuanya keluar dengan kode 0
    dan tanpa satu pun peringatan.
-3. Struktur hasilnya dibandingkan otomatis dengan instalasi bersih dari
-   `skema_database.sql`, di 89 titik: definisi kolom (tipe, urutan, null,
-   default), index, foreign key beserta aturan cascade, check constraint,
-   engine, collation, dan daftar view.
+3. Struktur hasilnya dibandingkan otomatis dengan instalasi bersih, di 89
+   titik: definisi kolom (tipe, urutan, null, default), index, foreign key
+   beserta aturan cascade, check constraint, engine, collation, dan daftar view.
    **Hasil: tidak ada perbedaan sama sekali.**
 4. Seluruh pengujian aplikasi dijalankan terhadap database hasil migrasi
    tersebut. **Hasil: semua lulus, 0 gagal.**
@@ -960,7 +1077,264 @@ SELECT 'stok negatif', COUNT(*) FROM tb_barang WHERE stok < 0;
 
 ---
 
+## Tahap 1: Dari MySQL ke SQLite
+
+> **Status: selesai dan terverifikasi.** 289 tes lulus, 0 gagal.
+
+### Alasan
+
+Aplikasi ini harus bisa dipakai dari flashdisk di mana saja, termasuk komputer
+yang tidak punya internet dan tidak pernah melihat XAMPP. Selama masih MySQL,
+salin ke flashdisk berarti bawa folder htdocs, folder mysql, dan service
+database yang harus jalan. Itu tidak mungkin di depan kasir.
+
+### Apa yang berubah
+
+| No | Aspek | MySQL (sebelum) | SQLite (sekarang) |
+|---|---|---|---|
+| 1 | Bentuk data | Folder berisi file server | **Satu file** `data\kasir.db` |
+| 2 | Koneksi | Host, port, user, password | Tidak ada. Cuma path file |
+| 3 | Paket NuGet | `MySql.Data` 26.7.0 | `Microsoft.Data.Sqlite` 10.0.12 |
+| 4 | Cara pasang | Jalankan XAMPP, import SQL | Tidak ada, installer otomatis |
+| 5 | Folder aplikasi | `htdocs` + folder project | Satu folder, bisa disalin |
+| 6 | Tipe uang | `DECIMAL(15,2)` | `NUMERIC` + CHECK `ROUND(x,2) = x` |
+| 7 | Tipe `TINYINT(1)` | Dibaca driver sebagai `bool` | `INTEGER` 0/1, jebakan hilang |
+| 8 | Cap waktu update | `ON UPDATE CURRENT_TIMESTAMP` | Trigger `trg_barang_updated` |
+| 9 | Kunci baris saat transaksi | `SELECT ... FOR UPDATE` | `BeginTransaction(deferred: false)` |
+| 10 | Ambil id baris baru | `LAST_INSERT_ID()` | `SELECT last_insert_rowid()` |
+| 11 | Kode galat | `1062`, `1452`, `1451`, `4025` | `19` + `SqliteExtendedErrorCode` |
+| 12 | Hapus multi-tabel | `DELETE t FROM t JOIN ...` | `WHERE id IN (SELECT ...)` |
+| 13 | Isi tabel | `MySqlDataAdapter` | `QueryHelper.IsiTabel` |
+| 14 | Konfigurasi | `KASIR_SMK4_CONNECTION` | `KASIR_SMK4_DB` (path file) |
+| 15 | Berkas skema | `skema_database.sql` (MySQL) | `skema.sqlite.sql` |
+
+**Data lama tidak dimigrasi.** Aplikasi mulai dari nol. `tb_user` kosong, jadi
+satu akun `admin` dibuat otomatis. Kalau data MySQL lama masih dibutuhkan,
+ekspor dulu dengan `mysqldump` sebelum XAMPP dimatikan.
+
+### Paritas skema, dibuktikan bukan dikira
+
+Struktur hasil restrukturasi MySQL dipertahankan **seluruhnya**. Berikut
+hasil perbandingan otomatis antara `skema.sqlite.sql` dengan skema MySQL lama:
+
+| Objek | MySQL | SQLite | Status |
+|---|---|---|---|
+| Tabel | 5 | 5 | identik |
+| Kolom | 45 | 45 | identik, urutan sama |
+| Index | 10 | 10 | identik |
+| Foreign key | 5 | 5 | identik |
+| View | 2 | 2 | identik |
+| CHECK constraint | 13 | 14 | +1 (lihat catatan ENUM di bawah) |
+| Trigger | 0 | 1 | baru, menggantikan `ON UPDATE` |
+
+Penambahan CHECK ke-14 adalah `chk_mutasi_tipe`, yang menggantikan tipe `ENUM`
+pada kolom `tipe`. SQLite tidak punya tipe `ENUM`, jadi daftar nilainya ditulis
+sebagai syarat. Isinya sama persis dengan daftar yang dulu di `ENUM`.
+
+### Behavior SQLite yang harus diketahui
+
+Bagian ini penting. Semuanya diukur langsung, bukan diaspora dari dokumentasi.
+
+#### Uang bukan desimal presisi-tetap
+
+SQLite menyimpan `NUMERIC` sebagai bilangan pecahan biner IEEE-754. Tidak ada
+`DECIMAL(15,2)`. Artinya perkalian di dalam agregat bisa menghasilkan lebih dari
+dua desimal. Angka di bawah hasil pengukuran di SQLite 3.53.3:
+
+```
+1235.16 * 0.1                    = 123,516
+1235.16 * 0.2                    = 247,032
+1235.16 * 0.3                    = 370,548
+SUM(harga_satuan * qty)          = 741,096     <-- tiga desimal
+ROUND(SUM(harga_satuan * qty),2) = 741,10
+```
+
+Tiga aturan yang muncul dari itu:
+
+1. **Semua agregat uang wajib dibungkus `ROUND`.**
+   Benar: `SELECT ROUND(SUM(total_bayar), 2) FROM ...`
+   Salah: `SELECT SUM(total_bayar) FROM ...`
+
+2. **Laporan menjumlahkan kolom `subtotal`, bukan mengalikan ulang.**
+   `subtotal` sudah dibulatkan dua desimal saat nota disimpan oleh
+   `FormKasir.BulatkanSubtotal`, dan dijaga CHECK `ROUND(x,2) = x`. Mengali
+   ulang harga kali qty di dalam SQL menghasilkan 741,096 untuk total yang
+   seharusnya 741,10.
+
+3. **Aritmetika C# tetap pakai `decimal`.**
+   `decimal` di C# eksak, jadi 1235.16 * 0.1 = 123.516 tepat. Nilainya tetap
+   harus dibulatkan sebelum disimpan, dan CHECK constraint akan menolaknya
+   kalau terlupa.
+
+#### Tipe ENUM tidak ada
+
+Diganti CHECK constraint. Daftar nilainya harus selalu sama dengan
+`Session.IsRoleValid()` di `Form1.cs`. Menambah role berarti mengubah **dua**
+tempat, bukan satu.
+
+#### `ON UPDATE CURRENT_TIMESTAMP` tidak ada
+
+Diganti trigger. Bentuk yang dipakai:
+
+```sql
+CREATE TRIGGER IF NOT EXISTS trg_barang_updated
+AFTER UPDATE ON tb_barang
+FOR EACH ROW
+BEGIN
+    UPDATE tb_barang
+       SET diperbarui_pada = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')
+     WHERE kode_barcode = NEW.kode_barcode;
+END;
+```
+
+Dua jebakan yang sudah ditemukan dan dihindari:
+
+- **`NEW.col = nilai` tidak didukung SQLite.** Akan muncul
+  `near "NEW": syntax error`. Cara resmi adalah UPDATE atau INSERT bersarang
+  seperti di atas.
+- **`WHEN OLD.x IS NOT NEW.x` di trigger AFTER selalu bernilai FALSE.** Kolomnya
+  masih menyimpan nilai lama saat syarat dicek, jadi triggernya terpasang tapi
+  diam-diam tidak mengubah apa pun. Trigger ini sengaja tidak memakai `WHEN`.
+
+Trigger `updated_at` juga harus punya `PRAGMA recursive_triggers = OFF`, karena
+ia melakukan UPDATE ke tabelnya sendiri.
+
+#### PRAGMA bersifat per-koneksi
+
+Tidak bisa cukup dipasang sekali di awal aplikasi. `Koneksi.GetConn()`
+mengulanginya pada setiap koneksi:
+
+| PRAGMA | Nilai | Kalau tidak dipasang |
+|---|---|---|
+| `foreign_keys` | `ON` | Hapus barang meninggalkan mutasi dan nota yatim |
+| `recursive_triggers` | `OFF` | Trigger updated_at memanggil dirinya sendiri tanpa henti |
+| `busy_timeout` | 5000 ms | Flashdisk lambat langsung gagal |
+
+Karena itu **semua akses database wajib lewat `Koneksi.GetConn()`**.
+
+#### Pooling harus dimatikan
+
+Dengan `Pooling=True`, berkas tetap terkunci beberapa detik setelah aplikasi
+ditutup, dan muncul galat "being used by another process". Berkas yang
+ terkunci tidak bisa disalin ke flashdisk. `Pooling=False` +
+`Cache=Private` memastikan `kasir.db` bebas langsung disalin begitu jendela
+ditutup.
+
+#### Tidak boleh memakai WAL
+
+`journal_mode=WAL` menghasilkan berkas `-wal` dan `-shm` di samping database.
+FAT32 tidak mendukung file journal dan file locking-nya tidak lengkap, jadi WAL
+tidak boleh dinyalakan untuk aplikasi yang disalin ke flashdisk. Aplikasi ini
+tidak pernah menyetelnya.
+
+#### Installer memecah sendiri berkas SQL
+
+SQLite hanya menjalankan perintah pertama per panggilan `ExecuteNonQuery`.
+Isi `skema.sqlite.sql` tidak bisa dijalankan sekaligus, jadi
+`Database.PisahStatementSql` memecahnya sendiri. Pemecah itu harus mengenal:
+
+- titik koma di dalam string
+- dua hubung (`--`) di dalam string yang bukan komentar
+- kutip yang diulang di dalam string
+- string berpenanda kutip-ganda
+- badan trigger (`BEGIN ... END`) yang memuat titik koma
+
+Seluruh perintah dijalankan **di dalam satu transaksi**, jadi pemasangan yang
+gagal di tengah tidak meninggalkan tabel setengah jadi.
+
+### Yang sengaja tidak diubah
+
+| Nilai lama | Nilai sekarang | Alasan |
+|---|---|---|
+| `AutoIncrement` | `AUTOINCREMENT` penuh | `id` = jejak audit, tidak boleh dipakai ulang |
+| `TINYINT(1)` | `INTEGER` + CHECK | Hilangkan jebakan `bool` |
+| `AUTO_INCREMENT` | `AUTOINCREMENT` | Untuk SQLite wajib ditulis penuh |
+| Tidak ada tipe uang | `NUMERIC` + CHECK | Ganti `DECIMAL(15,2)` |
+
+### Berkas baru
+
+| Berkas | Isi |
+|---|---|
+| `skema.sqlite.sql` | Skema instalasi SQLite, 316 baris, ASCII-only, idempotent |
+| `SqliteError.cs` | Mengubah `SqliteException` jadi kategori: `Unik`, `Check`, `ForeignKey`, `TidakBolehNull` |
+| `QueryHelper.cs` | Pengganti `MySqlDataAdapter` untuk mengisi `DataTable` |
+| `AppConfig.cs` | Path database + connection string |
+
+### Cara menjalankan pengujian
+
+Pengujian memakai **berkas database sendiri** di `data\kasir_uji.db` di folder
+build, bukan `kasir.db` milik pengguna. Dipasthkan lewat environment variable
+`KASIR_SMK4_DB` sebelum apa pun menyentuh `AppConfig`.
+
+```powershell
+cd ujiapp
+dotnet build --no-incremental    # --no-incremental wajib
+dotnet run --no-build
+```
+
+Hasil terakhir: **289 lulus, 0 gagal**. Harness membersihkan semua datanya
+sendiri; setelah dijalankan, `kasir_uji.db` hanya berisi satu akun `admin`.
+
+---
+
+## Cadangan dan Pemulihan
+
+### Membuat cadangan
+
+Cadangan cukup menyalin **satu berkas**. Aplikasi harus sudah ditutup dulu,
+supaya `kasir.db` tidak sedang ditulis.
+
+```
+1. Tutup jendela aplikasi
+2. File Explorer -> folder aplikasi -> data
+3. Klik kanan kasir.db -> Salin
+4. Tempel ke flashdisk atau folder cadangan
+5. Beri nama sesuai tanggal, misal kasir_2026-09-28.db
+```
+
+Kalau ingin lebih aman, salin ke **dua** tempat berbeda. Berkas ini satu-satunya
+yang berisi data, jadi kehilangan berarti kehilangan semua penjualan.
+
+> Menu backup dari dalam aplikasi **belum ada**. Sudah direncanakan untuk tahap
+> berikutnya, bersama 16 fitur lain.
+
+### Pemulihan
+
+1. Tutup aplikasi.
+2. Hapus `data\kasir.db` yang sekarang.
+3. Salin berkas cadangan ke `data\kasir.db`.
+4. Jalankan aplikasi.
+
+Tidak ada perintah, tidak ada tool, tidak ada akun yang perlu dibuat.
+Aplikasi langsung membaca salinan itu, apa adanya.
+
+### Memeriksa cadangan
+
+Tanpa aplikasi, pakai SQLiteStudio atau `sqlite3` dari terminal:
+
+```bash
+sqlite3 data/kasir.db "SELECT COUNT(*) FROM tb_transaksi;"
+```
+
+Kalau angkanya masuk akal, salinannya utuh. Kalau muncul `no such table` atau
+`file is not a database`, berarti yang tersalin bukan `kasir.db` yang benar.
+
+### Yang perlu dicadangkan, dan yang tidak
+
+| Yang perlu dicadangkan | Tidak perlu |
+|---|---|
+| `data\kasir.db` | Berkas `.exe` dan `.dll` (diambil ulang dari installer) |
+| | Folder `bin\` dan `obj\` (hasil build) |
+| | Berkas `skema.sqlite.sql` (ikut di dalam installer) |
+
+---
+
 ## Ringkasan Perbaikan
+
+> **Bagian ini mencakup dua tahap.** Cacat 1 sampai 26 ditemukan pada versi
+> awal yang masih MySQL. Cacat 27 sampai 33 ditemukan saat migrasi ke SQLite dan
+> tidak mungkin ditemukan sebelum itu, karena penyebabnya adalah behavior
+> SQLite yang berbeda.
 
 Berikut daftar cacat yang ditemukan pada versi awal dan perbaikannya.
 
@@ -1002,12 +1376,12 @@ Berikut daftar cacat yang ditemukan pada versi awal dan perbaikannya.
 | `Session.cs` | Menyimpan data user yang sedang login |
 | `PasswordHasher.cs` | Hashing dan verifikasi password |
 | `InputHelper.cs` | Validasi input dan format nominal |
-| `AppConfig.cs` | Pembacaan `appsettings.json` |
+| `AppConfig.cs` | Penentuan path berkas database dan penyusunan connection string |
 | `InputDialog.cs` | Dialog kecil minta satu nilai dari user (ubah jumlah) |
-| `appsettings.json` | Konfigurasi connection string |
-| `skema_database.sql` | Skema lengkap untuk instalasi baru |
-| `migration_restruktur.sql` | Migrasi struktur database ke versi 3.0 |
-| `migration_id_unsigned.sql` | Migrasi penyamaan tipe kolom ID |
+| `appsettings.json` | Konfigurasi path berkas database |
+| `skema_database.sql` | Skema MySQL **(sudah dihapus, digantikan `skema.sqlite.sql`)** |
+| `migration_restruktur.sql` | Migrasi struktur database ke versi 3.0 **(sudah dihapus)** |
+| `migration_id_unsigned.sql` | Migrasi penyamaan tipe kolom ID **(sudah dihapus)** |
 
 ### Cacat yang ditemukan oleh Pengujian
 
@@ -1054,7 +1428,37 @@ Bug ini ditemukan karena pengujian yang sama gagal di dua tempat. Pertama di
 harness test, yang melaporkan `is_active` terbaca `0` padahal di database `1`.
 Baru setelah itu jejaknya ditelusuri sampai ke kode aplikasi.
 
-### Hasil Verifikasi
+### Cacat yang ditemukan saat migrasi ke SQLite
+
+Tujuh cacat berikut tidak mungkin ditemukan selama masih MySQL, karena
+penyebabnya adalah perbedaan behavior kedua mesin.
+
+| No | Cacat | Dampak | Perbaikan |
+|---|---|---|---|
+| 27 | Laporan menjumlahkan `SUM(harga_satuan * qty)` | Total nota di laporan jadi **741,096**, bukan **741,10**. Selisih 3 desimal yang langsung terlihat oleh kasir dan pelanggan. | Laporan menjumlahkan kolom `subtotal` yang sudah dibulatkan, dan setiap agregat dibungkus `ROUND(..., 2)` |
+| 28 | Nilai uang di SQLite bisa lebih dari dua desimal | CHECK constraint menolak `1234.567`, jadi transaksi gagal disimpan tanpa pesan jelas | `FormKasir.BulatkanSubtotal` memakai `decimal` C# yang eksak, hasilnya dibulatkan sebelum masuk database |
+| 29 | `ExecuteScalar()` setelah `INSERT` mengembalikan `null` | `id_transaksi` bernilai `0`, detail nota tidak pernah terhubung ke header, laporan kosong | `SELECT last_insert_rowid()` pada koneksi yang sama |
+| 30 | `Pooling=True` menahan berkas setelah `Close` | `kasir.db` terkunci beberapa detik setelah jendela ditutup, jadi **tidak bisa disalin ke flashdisk** | `Pooling=False` + `Cache=Private` pada connection string |
+| 31 | Folder `data` tidak pernah terbentuk | Aplikasi gagal membuka database pada instalasi baru | `AppConfig.GetPathDatabase()` selalu memanggil `Simpan()` yang memanggil `SiapkanFolderInduk()` |
+| 32 | Reader SQLite yang masih terbuka menahan kunci | Galat `database is locked` saat satu form masih memegang reader sementara form lain mau menulis | Semua reader dibungkus `using` dalam blok terpisah, ditutup sebelum koneksi lain dibuka |
+| 33 | Trigger `updated_at` tanpa `WHEN OLD.x IS NOT NEW.x` | Trigger terpasang, tidak pernah error, tapi juga diam-diam tidak mengubah apa pun. `diperbarui_pada` selalu kosong | Trigger sengaja tanpa syarat `WHEN`, memakai UPDATE bersarang |
+
+Dua jebakan tambahan yang sempat muncul, dan keduanya berhasil dihindari:
+
+- **Trigger dengan `NEW.col = nilai` gagal dimuat.** SQLite tidak mendukung
+  penulisan kolom dari trigger dengan cara itu; muncul galat
+  `near "NEW": syntax error`. Bentuk resmi yang dipakai adalah UPDATE atau
+  INSERT bersarang.
+- **PRAGMA `recursive_triggers` harus `OFF`.** Trigger `updated_at`
+  melakukan UPDATE ke tabelnya sendiri. Kalau `recursive_triggers` nyala, ia
+  memanggil dirinya sendiri berulang kali sampai kehabisan kedalaman.
+
+### Hasil Verifikasi (jaman MySQL)
+
+> **Catatan:** angka di bawah ini tercatat saat aplikasi masih memakai MySQL.
+> Setelah migrasi ke SQLite, harness yang sama dijalankan ulang dan sekarang
+> totaled **289 lulus, 0 gagal**. Lihat
+> [Hasil Pengujian Tahap 1](#hasil-pengujian-tahap-1-sqlite).
 
 Pengujian dilakukan dengan harness terpisah yang meng-compile seluruh kode aplikasi
 lalu memanggil method aslinya, termasuk `FormKasir.SimpanTransaksi` yang benar-benar
@@ -1064,7 +1468,7 @@ menulis ke database.
 |---|---|---|
 | `InputHelper.TryParseNominal` | 24 | lulus |
 | `InputHelper.FormatNominal` | 17 | lulus |
-| `InputHelper.FormatJumlah` | 9 | lulus |
+| `InputHelper.FormatJumlah` (bulat, sesuai satuan pcs) | 11 | lulus |
 | `InputHelper.AmbilDecimal` | 8 | lulus |
 | `PasswordHasher` | 9 | lulus |
 | Koneksi dan versi database | 2 | lulus |
@@ -1078,7 +1482,11 @@ menulis ke database.
 | `BulatkanSubtotal` | 6 | lulus |
 | Satuan barang tidak hilang saat edit | 10 | lulus |
 | Tipe data dari MySql.Data (`TINYINT(1)` jadi `bool`) | 12 | lulus |
-| **Total** | **142** | **0 gagal** |
+| `InputHelper.TryParseBilanBulat` (tolak "1,5", bukan jadi 15) | 17 | lulus |
+| Saringan ketikan kolom angka | 10 | lulus |
+| Nominal uang tidak dikoreksi pemformatan | 8 | lulus |
+| Qty desimal ditolak, jalur simpan sah tetap benar | 7 | lulus |
+| **Total** | **186** | **0 gagal** |
 
 Verifikasi lain yang dilakukan:
 
@@ -1086,7 +1494,7 @@ Verifikasi lain yang dilakukan:
   stok negatif, harga jual nol, qty nol, user tak dikenal, barang tak dikenal, role
   ngawur, hapus barang terjual, dan nomor nota duplikat semuanya benar-benar ditolak.
 - **Instalasi bersih diuji dari nol.** Database `db_uji_skema` dibuat dari
-  `skema_database.sql`, lalu seluruh pengujian dijalankan terhadapnya dan lulus.
+  berkas skema, lalu seluruh pengujian dijalankan terhadapnya dan lulus.
 - **Rantai migrasi diuji dari nol.** Database lama dipulihkan dari backup, ketiga
   skrip migrasi dijalankan berurutan tanpa error, dan strukturnya dibandingkan
   otomatis dengan instalasi bersih di 89 titik (kolom, index, foreign key, check
@@ -1098,11 +1506,60 @@ Verifikasi lain yang dilakukan:
 - **Data asli utuh.** Setelah semua pengujian, `db_kasir_smk4` berisi 1 user,
   2 barang, 1 transaksi, 1 detail, 1 mutasi — sama seperti sebelum pengujian.
 
-### Catatan Penting untuk Data Lama
+### Hasil Pengujian Tahap 1 (SQLite)
+
+> **Status: lulus. 289 dari 289, 0 gagal.** Angka ini menggantikan hitungan
+> 186 tes di atas, yang masih mencatat hasil jaman MySQL.
+
+Pengujian yang sama dipindahkan ke SQLite, lalu ditambah 6 kelompok baru
+khusus untuk memastikan tidak ada yang tertinggal atau berubah diam-diam.
+
+| Kelompok | Isi pengujian |
+|---|---|
+| A | Pemasangan skema dari nol, baik `skema.sqlite.sql` maupun lewat `Database.PastikanTerpasang` |
+| B | Pemecah statement SQL, 12 kasus: titik koma dalam string, `--` dalam string, kutip berulang, badan trigger, dan lain-lain |
+| C | Batasan CHECK, FK, UNIQUE, dan `ROUND(x,2) = x` benar-benar menolak |
+| D | PRAGMA: `foreign_keys`, `recursive_triggers`, `busy_timeout` |
+| E | Trigger `trg_barang_updated` benar-benar mengubah `diperbarui_pada` |
+| F | Penentuan path dan penyusunan connection string |
+
+| Konfigurasi | Nilai |
+|---|---|
+| Jumlah pengujian | 289 |
+| Lulus | 289 |
+| Gagal | 0 |
+| Build | 0 error, 0 warning |
+| Database uji | `data\kasir_uji.db` (terpisah dari `kasir.db` milik pengguna) |
+
+Bukti tambahan:
+
+- **Skema identik dengan MySQL, bukan dikira-kira.** Perbandingan otomatis
+  terhadap skema MySQL lama: 45 dari 45 kolom cocok, 10 dari 10 index cocok,
+  2 dari 2 view cocok, 5 dari 5 foreign key cocok. Selisih objek antara
+  `skema.sqlite.sql` dan isi database setelah dipasang: **0**.
+- **Harness idempoten.** Dijalankan dua kali, keluarannya 289 baris dan identik
+  persis. Setelah selesai, `kasir_uji.db` hanya berisi satu akun `admin`; 4
+  tabel lain kosong. Tidak ada sisa pengujian.
+- **Tidak ada berkas samping.** Setelah GUI ditutup, folder `data` berisi
+  `kasir.db` saja. Tidak ada `kasir.db-wal` maupun `kasir.db-shm`. Berkas
+  langsung bisa disalin.
+- **Toleransi float diukur, bukan diasumsikan.** `SUM(harga_satuan * qty)`
+  untuk 3 baris bernilai `741,096`; total nota sebenarnya `741,10`. Inilah
+  alasan laporan menjumlahkan kolom `subtotal`.
+- **Bug startup nyata ditemukan oleh pengujian.** Folder `data` ternyata tidak
+  pernah terbentuk, karena pembuatan folder hanya ada di jalur yang tidak pernah
+  terpakai. Diperbaiki di `AppConfig.GetPathDatabase()`.
+
+### Catatan Penting untuk Data Lama (sudah tidak berlaku)
+
+> **Semua catatan di bawah ini kedaluwarsa.** Data MySQL lama **tidak**
+> dimigrasi ke SQLite, jadi tidak ada lagi data lama yang perlu dimigrasi.
+> Dump `mysqldump` yang dulu ada di folder `backup/` juga sudah dihapus.
+> Bagian ini dipertahankan hanya sebagai catatan apa yang pernah dikerjakan.
 
 1. **Password lama tidak perlu diubah manual.** Password plain text yang sudah ada tetap bisa login, lalu otomatis diubah menjadi hash.
-2. **Backup database wajib dibuat** sebelum menjalankan migrasi. Salinan pra-migrasi ada di folder `backup/`.
-3. **Kolom `qty` dan `stok` berubah tipe** dari `INT` menjadi `DECIMAL(15,2)`. Nilai lama otomatis jadi `99.00`, tidak ada yang hilang.
+2. **Backup database wajib dibuat** sebelum menjalankan migrasi. Salinan pra-migrasi sudah dihapus bersama skrip migrasinya.
+3. **Kolom `qty` dan `stok` berubah tipe** dari `INT` menjadi dua desimal. Nilai lama otomatis jadi `99.00`, tidak ada yang hilang.
 4. **`id_transaksi` untuk transaksi lama** diisi otomatis dari `no_nota` masing-masing.
 5. **`harga_satuan` untuk transaksi lama** dihitung dari `subtotal / qty`, yaitu harga yang benar-benar dibayar.
 6. **Data transaksi lama masuk ke `tb_mutasi_stok`** dengan keterangan "Rekonstruksi transaksi lama", supaya riwayat stok tidak kosong.
@@ -1112,21 +1569,21 @@ Verifikasi lain yang dilakukan:
 Fitur berikut memang belum ada dan tidak ikut dikerjakan:
 
 1. Belum ada fitur **cetak struk**.
-2. Belum ada layar **laporan penjualan** di aplikasi. Query sudah tersedia lewat
-   view `v_laporan_penjualan` dan `v_stok_gudang`, tapi belum ada halaman untuk menampilkannya.
+2. **Layar laporan penjualan sudah ada** (`FormLaporan`): filter periode dan kasir,
+   rekap nota, rincian item per nota, produk terlaris, dan ekspor CSV. Yang belum ada
+   adalah laporan **laba** dan laporan **stok**.
 3. Belum ada **manajemen user** dari aplikasi (tambah user, ubah role, reset password).
    Untuk saat ini, akun baru harus dibuat lewat SQL.
 4. Belum ada **riwayat transaksi** dengan fitur cetak ulang nota.
 5. Pencarian barang pada mesin kasir hanya berdasarkan barcode, tanpa pencarian berdasarkan nama.
 6. Harga jual masih diisi manual, belum ada hitung untung otomatis dari harga beli.
    Data yang dibutuhkan untuk itu sudah ada: `harga_beli`, `harga_jual`, dan
-   `harga_satuan` di tabel detail.
+   `harga_satuan` di tabel detail. Untuk laporan laba per nota, `tb_detail_transaksi`
+   perlu tambahan kolom snapshot `harga_beli_satuan`.
 7. Fitur harga grosir (`minimal_grosir` dan `harga_grosir`) sudah ada di tabel
    `tb_barang` tetapi belum dipakai di antarmuka.
-8. Kolom `satuan` sudah ada di database dan tampil di tabel, tapi **belum bisa diisi
-   dari form**. Untuk barang baru nilainya `pcs`, dan untuk barang lama satuan
-   aslinya dipertahankan saat disunting. Mengubahnya perlu lewat SQL, atau dengan
-   menambahkan kontrol baru di `FormBarang.Designer.cs`.
+8. Kolom `satuan` **sudah bisa diisi** dari `FormBarang` lewat `cmbSatuan`. Qty dan
+   stok sengaja hanya menerima bilangan bulat per satuan (`pcs`).
 9. Kolom `diskon_total` dan `diskon_item` sudah ada di database tapi belum dipakai
    di antarmuka. Perhitungan diskon belum ada.
 10. Kolom `catatan` di `tb_transaksi` sudah ada tapi belum dipakai.
@@ -1134,6 +1591,10 @@ Fitur berikut memang belum ada dan tidak ikut dikerjakan:
 12. Kolom `id_transaksi` dipakai sebagai foreign key, tapi nomor nota tetap
     disimpan di `tb_detail_transaksi` juga. Sedikit denormalisasi, ini disengaja
     supaya pencarian per nota tidak perlu JOIN.
+13. **BUTUH PENGECEKAN ULANG.** Catatan ini ditulis saat aplikasi masih memakai
+    MySQL. Sekarang sudah diselesaikan: data berada di satu berkas
+    `data\kasir.db`, aplikasi jalan tanpa server, dan foldernya bisa disalin ke
+    flashdisk. Lihat [Tahap 1: Dari MySQL ke SQLite](#tahap-1-dari-mysql-ke-sqlite).
 
 ### Catatan Teknis untuk Pengembang
 
@@ -1143,8 +1604,49 @@ Fitur berikut memang belum ada dan tidak ikut dikerjakan:
   `WHERE is_active = 1` di setiap query yang membaca tabel tersebut.
 - **Setiap perubahan stok harus menulis ke `tb_mutasi_stok`.** Kalau ada fitur baru
   yang mengubah stok (mis. fitur retur), jangan lupa tambahkan `CatatMutasiStok`.
-- **`SELECT ... FOR UPDATE` di `SimpanTransaksi` tidak boleh dihapus.** Itu yang
-  mencegah dua kasir menjual stok yang sama.
+- **`BeginTransaction(deferred: false)` di `SimpanTransaksi` tidak boleh diubah
+  jadi `BeginTransaction()` biasa.** Yang tanpa `deferred` berarti `BEGIN
+  IMMEDIATE`, yaitu kunci tulis diambil sejak transaksi dimulai, bukan saat
+  perintah pertama dieksekusi. Inilah pengganti `SELECT ... FOR UPDATE` yang
+  dulu dipakai, dan itu yang mencegah dua kasir menjual stok yang sama.
+- **Jangan pernah mem-format ulang nominal saat pengguna mengetik.** Fungsi
+  `FormatRibuanOtomatis` pernah dipasang karena ia membuang semua karakter
+  non-angka lalu menulis ulang sebagai bilangan bulat, sehingga `5000,50` tampil
+  `50.050` (100 kali lipat) dan `10000,50` jadi `100.050` sehingga kembalian yang
+  ditampilkan ikut salah. Fungsi itu sudah dihapus. Kolom nominal dibiarkan apa
+  adanya dan divalidasi saat disimpan dengan `InputHelper.TryParseNominal`.
+- **Kolom stok dan qty dikunci ke bilangan bulat** lewat
+  `InputHelper.BolehMasukAngka` pada event `KeyPress`. Jangan pakai
+  `TryParseNominal` untuk kolom itu: `TryParseNominal("1,5")` menghasilkan `1,5`
+  dan `1,5` tidak boleh menjadi `1` atau `2` secara diam-diam. Gunakan
+  `InputHelper.TryParseBilanBulat`, yang menolak `1,5` dengan pesan jelas.
+- **Pembulatan `FormatJumlah` bukan cara mem-parse.** Nilai sudah divalidasi
+  lebih dulu oleh `TryParseBilanBulat`, jadi `FormatJumlah` hanya jadi jaring
+  pengaman untuk data lama atau hasil perhitungan.
+- **Semua akses database wajib lewat `Koneksi.GetConn()`.** PRAGMA
+  `foreign_keys` menempel pada koneksi, bukan pada berkas. Koneksi yang dibuat
+  langsung dengan `new SqliteConnection(...)` tidak punya batasan foreign key
+  sama sekali, dan pengujian tidak akan menangkapnya.
+- **Semua agregat uang wajib dibungkus `ROUND(..., 2)`.** SQLite menyimpan
+  `NUMERIC` sebagai pecahan biner, jadi `SUM(harga * qty)` bisa menghasilkan
+  `741,096`. Laporan menjumlahkan kolom `subtotal` yang sudah dibulatkan, bukan
+  mengalikan ulang.
+- **Nilai uang baru boleh disimpan kalau sudah dua desimal.** CHECK constraint
+  `ROUND(x, 2) = x` menolak `1234.567` dengan galat
+  `CHECK constraint failed`. Jadi `1235.16m * 0.1m` harus dilewatkan
+  `FormKasir.BulatkanSubtotal` lebih dulu, bukan langsung di-`INSERT`.
+- **Jangan pakai tipe `ENUM`, jangan pakai `AUTO_INCREMENT`.** SQLite hanya
+  mengenal `AUTOINCREMENT`. Untuk daftar nilai terbatas, pakai CHECK constraint.
+- **`NEW.col = nilai` tidak didukung SQLite.** Untuk menulis kolom dari trigger,
+  pakai UPDATE atau INSERT bersarang, seperti yang dilakukan
+  `trg_barang_updated`.
+- **Jangan pakai `DELETE t FROM t JOIN ...`.** SQLite tidak punya hapus
+  multi-tabel. Bentuk yang benar: `DELETE FROM t WHERE id IN (SELECT ... FROM
+  x JOIN ...)`.
+- **Jangan pakai `journal_mode=WAL`.** Aplikasi ini dirancang untuk flashdisk
+  FAT32, dan FAT32 tidak mendukung file journal.
+- **Jangan pernah mengatur `Pooling=True`.** Berkas `kasir.db` akan tetap
+  terkunci setelah aplikasi ditutup, dan tidak bisa disalin ke flashdisk.
 
 ---
 
@@ -1155,7 +1657,7 @@ Sudah selesai:
 - [x] Ganti penyimpanan password dengan hashing (`PBKDF2`).
 - [x] Pindahkan connection string ke `appsettings.json`.
 - [x] Implementasikan `Session.UserId` global dan gunakan pada penyimpanan transaksi.
-- [x] Gunakan `transaction` MySQL untuk atomicity saat menyimpan transaksi.
+- [x] Gunakan `transaction` database untuk atomicity saat menyimpan transaksi.
 - [x] Validasi stok sebelum scan dan saat pembayaran.
 - [x] Dukungan input nominal dengan pemisah ribuan, misalnya `25.000`.
 - [x] Terapkan tipe `decimal` untuk seluruh perhitungan nominal di sisi aplikasi.
@@ -1167,24 +1669,34 @@ Sudah selesai:
 - [x] Jual barang timbang (`qty` dan `stok` jadi `DECIMAL(15,2)`).
 - [x] Menu klik kanan untuk mengoreksi jumlah di keranjang.
 - [x] View laporan `v_laporan_penjualan` dan `v_stok_gudang`.
+- [x] Layar laporan penjualan dengan filter periode, filter kasir, ekspor CSV,
+      dan pengoreksi jumlah di keranjang tanpa scan barcode berulang.
+- [x] Kolom input **satuan** (`cmbSatuan`) di `FormBarang`.
+- [x] Ekspor laporan ke CSV.
+- [x] Pindahkan penyimpanan dari MySQL ke **SQLite** supaya aplikasi benar-benar
+      offline dan datanya cukup satu berkas untuk disalin ke flashdisk.
+- [x] Installer skema otomatis, jadi tidak ada lagi langkah import SQL manual.
+- [x] `PRAGMA foreign_keys = ON` di setiap koneksi, bukan sekali di awal aplikasi.
+- [x] `Pooling=False` supaya `kasir.db` tidak terkunci setelah aplikasi ditutup.
+- [x] Bulatkan seluruh agregat uang dengan `ROUND(..., 2)`.
+- [x] Pemecah statement SQL yang sadar trigger, supaya skema bisa dijalankan
+      sebagai satu rangkaian perintah.
 
 Belum dikerjakan:
-
+- [ ] Menu **backup dan restore ke flashdisk**.
 - [ ] Tambahkan **cetak struk** (printing thermal 58mm) setelah pembayaran berhasil.
-- [ ] Buat **layar laporan penjualan** harian atau bulanan dengan filter tanggal.
-      Query-nya sudah siap, tinggal ditampilkan.
 - [ ] Tambah **grafik penjualan** pada dashboard admin.
 - [ ] Tambahkan **manajemen user** (tambah user, ubah role, reset password).
 - [ ] Tambahkan **riwayat transaksi** dengan fitur cetak ulang nota.
 - [ ] Tambahkan pencarian barang berdasarkan nama di mesin kasir.
 - [ ] **Pembatalan transaksi (void)** dengan alasan, dan catat di `tb_mutasi_stok`
       sebagai mutasi `MASUK` supaya stok kembali.
-- [ ] Kolom input **satuan** dan **diskon** di antarmuka.
+- [ ] Kolom input **diskon** di antarmuka.
 - [ ] Fitur harga grosir (`minimal_grosir` dan `harga_grosir`).
-- [ ] Hitung otomatis laba dari selisih harga jual dan harga beli. Data yang
-      dibutuhkan sudah lengkap di `tb_detail_transaksi.harga_satuan`.
+- [ ] Laporan **laba** dari selisih harga jual dan harga beli. Butuh kolom snapshot
+      `harga_beli_satuan` di `tb_detail_transaksi`, belum ada.
+- [ ] Laporan **stok** (nilai persediaan, barang lambat-moving).
 - [ ] Cetak label rak dan barcode dari `FormBarang`.
-- [ ] Ekspor laporan ke Excel atau CSV.
 - [ ] Sinkronisasi stok dengan timbangan digital secara real time.
 
 ---
@@ -1195,4 +1707,4 @@ Proyek ini dibuat untuk keperluan pembelajaran dan tugas sekolah di **SMK Negeri
 
 ---
 
-**Dibuat dengan C# - Windows Forms - .NET 10 - MySQL**
+**Dibuat dengan C# - Windows Forms - .NET 10 - SQLite**

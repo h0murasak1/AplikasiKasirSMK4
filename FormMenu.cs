@@ -3,18 +3,26 @@ namespace AplikasiKasirSMK4
     public partial class FormMenu : Form
     {
         private bool _sedangLogout;
+        private Form? _formAktif;
+        private Button? _tombolAktif;
+
+        private readonly Color WarnaTombolAktif = Color.FromArgb(41, 128, 185);
+        private readonly Color WarnaTombolNonaktif = Color.FromArgb(52, 73, 94);
+        private readonly Color WarnaTeksAktif = Color.White;
+        private readonly Color WarnaTeksNonaktif = Color.FromArgb(200, 210, 220);
 
         public FormMenu()
         {
             InitializeComponent();
+            UiThemeHelper.TerapkanIkon(this);
             Load += FormMenu_Load;
-            Resize += FormMenu_Resize;
             FormClosing += FormMenu_FormClosing;
         }
 
         private void FormMenu_Load(object? sender, EventArgs e)
         {
-            // Guard: dashboard ini hanya boleh dibuka oleh role Admin.
+            UiThemeHelper.TerapkanIkon(this);
+
             if (!Session.IsAdmin)
             {
                 MessageBox.Show(
@@ -26,63 +34,103 @@ namespace AplikasiKasirSMK4
                 return;
             }
 
-            PusatkanMenu();
-        }
-
-        private void FormMenu_Resize(object? sender, EventArgs e)
-        {
-            PusatkanMenu();
-        }
-
-        private void PusatkanMenu()
-        {
-            int totalWidth = 700;
-            int totalHeight = 160;
-
-            int startX = Math.Max(40, (ClientSize.Width - totalWidth) / 2);
-            int startY = Math.Max(panelHeader.Height + 30,
-                panelHeader.Height + (ClientSize.Height - panelHeader.Height - totalHeight) / 2);
-
-            btnInputBarang.Location = new Point(startX, startY);
-            btnKasir.Location = new Point(startX + 240, startY);
-            btnLaporan.Location = new Point(startX + 480, startY);
-            btnLogout.Location = new Point(startX, startY + 110);
-            btnLogout.Width = totalWidth;
-        }
-
-        private void btnInputBarang_Click(object sender, EventArgs e)
-        {
-            // Cegah jendela master barang terbuka berulang kali.
-            if (SudahTerbuka(typeof(FormBarang)))
+            Image? logo = UiThemeHelper.AmbilLogoSekolah();
+            if (logo != null)
             {
-                return;
+                picBrandLogo.Image = logo;
             }
 
-            new FormBarang().Show(this);
+            lblUserStatus.Text = $"👤 {Session.NamaLengkap} (Admin)";
+
+            // Buka Kasir secara default saat menu dashboard dibuka
+            BukaFormDalamPanel(new FormKasir { IsRootForm = false }, navKasir);
         }
 
-        private void btnKasir_Click(object sender, EventArgs e)
+        /// <summary>
+        /// Membuka form langsung di dalam panel konten dashboard tanpa membuat jendela baru.
+        /// </summary>
+        private void BukaFormDalamPanel(Form childForm, Button tombolNavigasi)
         {
-            if (SudahTerbuka(typeof(FormKasir)))
+            if (_formAktif != null)
             {
-                return;
+                _formAktif.Close();
+                _formAktif.Dispose();
             }
 
-            // Dibuka dari dashboard, jadi bukan form root (IsRootForm = false).
-            new FormKasir { IsRootForm = false }.Show(this);
+            _formAktif = childForm;
+            childForm.TopLevel = false;
+            childForm.FormBorderStyle = FormBorderStyle.None;
+            childForm.Dock = DockStyle.Fill;
+
+            panelKonten.Controls.Clear();
+            panelKonten.Controls.Add(childForm);
+            panelKonten.Tag = childForm;
+            childForm.BringToFront();
+            childForm.Show();
+
+            SorotTombolNavigasi(tombolNavigasi);
         }
 
-        private void btnLaporan_Click(object sender, EventArgs e)
+        private void SorotTombolNavigasi(Button tombolDipilih)
         {
-            if (SudahTerbuka(typeof(FormLaporan)))
+            Button[] semuaTombol = new[]
             {
-                return;
+                navKasir, navBarang, navLaporan, navStok,
+                navPiutang, navKomisi, navMaster, navBackup
+            };
+
+            foreach (Button b in semuaTombol)
+            {
+                b.BackColor = WarnaTombolNonaktif;
+                b.ForeColor = WarnaTeksNonaktif;
             }
 
-            new FormLaporan().Show(this);
+            tombolDipilih.BackColor = WarnaTombolAktif;
+            tombolDipilih.ForeColor = WarnaTeksAktif;
+            _tombolAktif = tombolDipilih;
         }
 
-        private void btnLogout_Click(object sender, EventArgs e)
+        private void navKasir_Click(object? sender, EventArgs e)
+        {
+            BukaFormDalamPanel(new FormKasir { IsRootForm = false }, navKasir);
+        }
+
+        private void navBarang_Click(object? sender, EventArgs e)
+        {
+            BukaFormDalamPanel(new FormBarang(), navBarang);
+        }
+
+        private void navLaporan_Click(object? sender, EventArgs e)
+        {
+            BukaFormDalamPanel(new FormLaporan(), navLaporan);
+        }
+
+        private void navStok_Click(object? sender, EventArgs e)
+        {
+            BukaFormDalamPanel(new FormStok(), navStok);
+        }
+
+        private void navPiutang_Click(object? sender, EventArgs e)
+        {
+            BukaFormDalamPanel(new FormPiutang(), navPiutang);
+        }
+
+        private void navKomisi_Click(object? sender, EventArgs e)
+        {
+            BukaFormDalamPanel(new FormKomisi(), navKomisi);
+        }
+
+        private void navMaster_Click(object? sender, EventArgs e)
+        {
+            BukaFormDalamPanel(new FormMasterMenu(), navMaster);
+        }
+
+        private void navBackup_Click(object? sender, EventArgs e)
+        {
+            BukaFormDalamPanel(new FormBackup(), navBackup);
+        }
+
+        private void btnLogout_Click(object? sender, EventArgs e)
         {
             DialogResult konfirmasi = MessageBox.Show(
                 "Anda yakin ingin logout dari aplikasi?",
@@ -90,43 +138,28 @@ namespace AplikasiKasirSMK4
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
 
-            if (konfirmasi != DialogResult.Yes)
-            {
-                return;
-            }
+            if (konfirmasi != DialogResult.Yes) return;
 
             _sedangLogout = true;
-            Session.Clear();
 
-            // Kembali ke layar login.
+            if (_formAktif != null)
+            {
+                _formAktif.Close();
+                _formAktif.Dispose();
+            }
+
+            Session.Clear();
             new Form1().Show();
             Close();
         }
 
         private void FormMenu_FormClosing(object? sender, FormClosingEventArgs e)
         {
-            // Menutup dashboard dengan tombol X berarti keluar dari aplikasi.
             if (!_sedangLogout)
             {
                 Session.Clear();
                 Application.Exit();
             }
-        }
-
-        /// <summary>Mencegah form yang sama dibuka lebih dari sekali.</summary>
-        private static bool SudahTerbuka(Type tipeForm)
-        {
-            foreach (Form f in Application.OpenForms)
-            {
-                if (f.GetType() == tipeForm && f.Visible)
-                {
-                    f.Activate();
-                    f.BringToFront();
-                    return true;
-                }
-            }
-
-            return false;
         }
     }
 }

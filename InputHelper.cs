@@ -120,13 +120,29 @@ namespace AplikasiKasirSMK4
         /// exception, karena pemanggilnya biasanya di dalam loop.
         /// </summary>
         /// <remarks>
-        /// Urutan percabangan di sini penting. Driver MySql.Data mengembalikan
-        /// <c>TINYINT(1)</c> sebagai <see cref="bool"/>, bukan sebagai angka.
-        /// Jadi kolom <c>is_active</c> yang bernilai 1 akan sampai ke sini
-        /// sebagai <c>true</c>. Kalau <c>bool</c> tidak diperiksa lebih dulu,
-        /// <c>"True"</c> gagal di-parse dan hasilnya 0 - yang membuat semua
-        /// user aktif terbaca sebagai nonaktif. Verifikasi ada di kelompok
-        /// pengujian "P. Tipe data dari MySql.Data".
+        /// Urutan percabangan di sini penting, dan urutannya tetap sama
+        /// meski driver sudah diganti dari MySQL ke SQLite.
+        /// <para>
+        /// Saat masih memakai MySql.Data, kolom TINYINT(1) sampai ke sini
+        /// sebagai <see cref="bool"/>, bukan sebagai angka. Jadi kolom
+        /// is_active bernilai 1 akan diterima sebagai true. Kalau bool tidak
+        /// diperiksa lebih dulu, "True" gagal di-parse dan hasilnya 0, yang
+        /// membuat semua user aktif terbaca sebagai nonaktif.
+        /// </para>
+        /// <para>
+        /// Di SQLite jebakan itu sudah hilang karena kolom is_active
+        /// sekarang bertipe INTEGER dan dibaca driver sebagai
+        /// <see cref="long"/>, yang ditangani langsung oleh cabang di bawah.
+        /// Cabang bool sengaja TIDAK dibuang: nilai boolean masih bisa
+        /// muncul dari sel DataGridView yang diisi manual, dan biaya
+        /// menaikkannya hampir nol.
+        /// </para>
+        /// <para>
+        /// Kolom uang bertipe NUMERIC dibaca sebagai <see cref="double"/>,
+        /// karena SQLite tidak punya desimal presisi-tetap. Konversi
+        /// double ke decimal di C# memakai 15 digit signifikan, yang
+        /// sudah lebih dari cukup untuk nilai uang dalam rupiah.
+        /// </para>
         /// </remarks>
         public static decimal AmbilDecimal(object? nilai)
         {
@@ -153,164 +169,154 @@ namespace AplikasiKasirSMK4
         }
 
         /// <summary>
-        /// Format tampilan jumlah (qty/stok) sesuai gaya Indonesia.
-        /// Pecahan hanya ditampilkan bila memang ada, agar 1 tetap tampil "1"
-        /// dan bukan "1,00". Contoh: 1 -&gt; "1", 1.5 -&gt; "1,5", 0.25 -&gt; "0,25".
+        /// Mengubah nilai dari database atau sel DataGridView menjadi int
+        /// dengan aman. Nilai yang tidak dikenali dianggap 0.
         /// </summary>
+        /// <remarks>
+        /// Dibuat saat pindah ke SQLite karena <c>SqliteDataReader</c> tidak
+        /// punya <c>GetInt32(string namaKolom)</c> seperti yang dimiliki
+        /// <c>MySqlDataReader</c>. Para pemanggil cukup menulis
+        /// <c>AmbilInt(reader["id_user"])</c> yang lebih ringkas daripada
+        /// menulis <c>reader.GetInt32(reader.GetOrdinal("id_user"))</c>.
+        /// </remarks>
+        public static int AmbilInt(object? nilai)
+        {
+            decimal angka = AmbilDecimal(nilai);
+            if (angka > int.MaxValue)
+            {
+                return int.MaxValue;
+            }
+            if (angka < int.MinValue)
+            {
+                return int.MinValue;
+            }
+            return (int)angka;
+        }
+
+        /// <summary>
+        /// Format tampilan jumlah (qty/stok) gaya Indonesia untuk bilangan bulat.
+        /// </summary>
+        /// <remarks>
+        /// Qty dan stok sengaja dibulatkan karena aplikasi menjual per satuan
+        /// utuh (pcs). Kolom database tetap bertipe NUMERIC, dua desimal,
+        /// dijaga CHECK ROUND(x,2) = x.
+        /// <para>
+        /// Pembulatan di sini hanya jaring pengaman terakhir, bukan cara
+        /// mem-parse. Nilai sudah divalidasi lebih dulu oleh
+        /// TryParseBilanBulat, sehingga angka pecahan tidak pernah diam-diam
+        /// berubah menjadi bilangan bulat.
+        /// </para>
+        /// </remarks>
         public static string FormatJumlah(decimal nilai)
         {
-            // Qty barang berupa bilangan bulat / pcs
             return Math.Round(nilai, 0, MidpointRounding.AwayFromZero)
                 .ToString("N0", new CultureInfo("id-ID"));
         }
 
         /// <summary>
-        /// Memberikan format titik ribuan otomatis pada HopeTextBox (misal 5000 -> 5.000)
-        /// dengan tetap menjaga posisi kursor pengguna saat mengetik.
+        /// Mem-parse bilangan bulat untuk kolom stok dan qty.
         /// </summary>
-        public static void FormatRibuanOtomatis(ReaLTaiizor.Controls.HopeTextBox textBox, ref bool isFormatting)
+        /// <remarks>
+        /// Sengaja ketat: pemisah koma atau titik **ditolak**, bukan diabaikan.
+        /// Sebelumnya input "1,5" dibersihkan menjadi "15" sehingga nilainya
+        /// 10 kali lipat lebih besar tanpa ada pesan apa pun. Itu terutama
+        /// berbahaya karena kolom qty dan stok menentukan jumlah yang ditagih
+        /// dan jumlah barang yang dianggap tersedia.
+        /// </remarks>
+        /// <example>
+        /// Menerima: "5" "10" "1.000" "1,000" "2.500.000"
+        /// Menolak: "1,5" "1.5" "0,25" "abc" "" "-3"
+        /// </example>
+        public static bool TryParseBilanBulat(string? teks, out int nilai, out string pesan)
         {
-            if (isFormatting) return;
+            nilai = 0;
+            pesan = string.Empty;
 
-            string raw = textBox.Text;
-            if (string.IsNullOrWhiteSpace(raw)) return;
+            string s = (teks ?? string.Empty).Trim().Replace(" ", string.Empty);
 
-            int oldCaret = textBox.SelectionStart;
-
-            // Hitung berapa digit angka sebelum posisi kursor saat ini
-            int digitsBeforeCursor = 0;
-            for (int i = 0; i < Math.Min(oldCaret, raw.Length); i++)
+            if (s.Length == 0)
             {
-                if (char.IsDigit(raw[i]))
+                pesan = "nilai masih kosong";
+                return false;
+            }
+
+            // Digit dan pemisah ribuan boleh lewat. Sisanya ditolak.
+            if (!s.All(c => char.IsDigit(c) || c == '.' || c == ','))
+            {
+                pesan = "hanya boleh diisi angka bulat, tanpa huruf atau tanda lain";
+                return false;
+            }
+
+            // Cuma satu jenis pemisah boleh dipakai, supaya "1.000,00" yang
+            // ambigu tidak bisa lolos.
+            int jumlahTitik = s.Count(c => c == '.');
+            int jumlahKoma = s.Count(c => c == ',');
+            if (jumlahTitik > 0 && jumlahKoma > 0)
+            {
+                pesan = "cuma boleh satu jenis pemisah ribuan, titik atau koma";
+                return false;
+            }
+
+            // Pemisah ribuan hanya sah kalau memang mengelompokkan tiga digit,
+            // contoh "1.000" atau "2.500.000". Tanpa syarat ini "1.5" ikut
+            // diterima dan berubah artinya.
+            char pemisah = jumlahTitik > 0 ? '.' : (jumlahKoma > 0 ? ',' : '\0');
+            if (pemisah != '\0')
+            {
+                string[] kelompok = s.Split(pemisah);
+
+                // Kelompok pertama boleh 1 sampai 3 digit ("1.000" sah),
+                // kelompok berikutnya wajib tepat 3 digit ("1.2345" tidak sah).
+                bool sah = kelompok.Length >= 2
+                    && kelompok[0].Length is >= 1 and <= 3
+                    && kelompok.Skip(1).All(k => k.Length == 3);
+
+                if (!sah)
                 {
-                    digitsBeforeCursor++;
+                    pesan = "pemisah ribuan harus berkelompok tiga digit (contoh: 1.000)";
+                    return false;
                 }
             }
 
-            // Ambil hanya karakter angka
-            string digitsOnly = new string(raw.Where(char.IsDigit).ToArray());
-            if (digitsOnly.Length == 0)
+            string hanyaAngka = new string(s.Where(char.IsDigit).ToArray());
+
+            // Batas 9 digit untuk stok sudah jauh melebihi kebutuhan toko.
+            // Kolomnya bertipe NUMERIC di SQLite, jadi batas ini dipegang
+            // oleh aplikasi, bukan oleh database.
+            if (hanyaAngka.Length > 9)
             {
-                isFormatting = true;
-                textBox.Text = string.Empty;
-                isFormatting = false;
-                return;
+                pesan = "angka terlalu besar";
+                return false;
             }
 
-            // Batasi panjang agar tidak overflow (maks 14 digit)
-            if (digitsOnly.Length > 14)
+            if (!int.TryParse(hanyaAngka, out nilai))
             {
-                digitsOnly = digitsOnly[..14];
+                nilai = 0;
+                pesan = "angka terlalu besar";
+                return false;
             }
 
-            if (long.TryParse(digitsOnly, out long number))
-            {
-                string formatted = number.ToString("N0", new CultureInfo("id-ID"));
-                if (formatted == raw) return;
-
-                isFormatting = true;
-                textBox.Text = formatted;
-
-                // Hitung posisi kursor baru yang sesuai
-                int newCaret = 0;
-                int countDigits = 0;
-                for (int i = 0; i < formatted.Length; i++)
-                {
-                    if (char.IsDigit(formatted[i]))
-                    {
-                        countDigits++;
-                    }
-                    if (countDigits == digitsBeforeCursor)
-                    {
-                        newCaret = i + 1;
-                        break;
-                    }
-                }
-
-                if (digitsBeforeCursor == 0)
-                {
-                    newCaret = 0;
-                }
-                else if (countDigits < digitsBeforeCursor)
-                {
-                    newCaret = formatted.Length;
-                }
-
-                textBox.SelectionStart = Math.Clamp(newCaret, 0, formatted.Length);
-                isFormatting = false;
-            }
+            return true;
         }
 
         /// <summary>
-        /// Memberikan format titik ribuan otomatis pada standard TextBoxBase.
+        /// Menyatakan apakah satu ketikan boleh masuk ke kolom angka bulat.
         /// </summary>
-        public static void FormatRibuanOtomatis(TextBoxBase textBox, ref bool isFormatting)
+        /// <remarks>
+        /// Dipasang di event KeyPress kolom stok dan qty supaya input tidak
+        /// mungkin menjadi tidak valid sejak awal. Hanya digit dan tombol
+        /// kontrol (Backspace, Enter, Delete) yang diizinkan, sehingga
+        /// koma dan titik tidak pernah sampai ke parser dan tidak pernah
+        /// dibersihkan diam-diam menjadi angka yang berbeda.
+        /// <para>
+        /// Fungsi ini murni dan bisa diuji tanpa membuat form, karena
+        /// <see cref="KeyPressEventArgs"/> tidak punya constructor publik.
+        /// </para>
+        /// </remarks>
+        public static bool BolehMasukAngka(char kunci)
         {
-            if (isFormatting) return;
-
-            string raw = textBox.Text;
-            if (string.IsNullOrWhiteSpace(raw)) return;
-
-            int oldCaret = textBox.SelectionStart;
-
-            int digitsBeforeCursor = 0;
-            for (int i = 0; i < Math.Min(oldCaret, raw.Length); i++)
-            {
-                if (char.IsDigit(raw[i]))
-                {
-                    digitsBeforeCursor++;
-                }
-            }
-
-            string digitsOnly = new string(raw.Where(char.IsDigit).ToArray());
-            if (digitsOnly.Length == 0)
-            {
-                isFormatting = true;
-                textBox.Text = string.Empty;
-                isFormatting = false;
-                return;
-            }
-
-            if (digitsOnly.Length > 14)
-            {
-                digitsOnly = digitsOnly[..14];
-            }
-
-            if (long.TryParse(digitsOnly, out long number))
-            {
-                string formatted = number.ToString("N0", new CultureInfo("id-ID"));
-                if (formatted == raw) return;
-
-                isFormatting = true;
-                textBox.Text = formatted;
-
-                int newCaret = 0;
-                int countDigits = 0;
-                for (int i = 0; i < formatted.Length; i++)
-                {
-                    if (char.IsDigit(formatted[i]))
-                    {
-                        countDigits++;
-                    }
-                    if (countDigits == digitsBeforeCursor)
-                    {
-                        newCaret = i + 1;
-                        break;
-                    }
-                }
-
-                if (digitsBeforeCursor == 0)
-                {
-                    newCaret = 0;
-                }
-                else if (countDigits < digitsBeforeCursor)
-                {
-                    newCaret = formatted.Length;
-                }
-
-                textBox.SelectionStart = Math.Clamp(newCaret, 0, formatted.Length);
-                isFormatting = false;
-            }
+            // char.IsControl = Backspace, Enter, Delete, dan sejenisnya.
+            return char.IsControl(kunci) || char.IsDigit(kunci);
         }
 
         /// <summary>

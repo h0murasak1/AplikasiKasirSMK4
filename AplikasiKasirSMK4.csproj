@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -6,16 +6,60 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+    <AssemblyTitle>Aplikasi Kasir SMK Negeri 4</AssemblyTitle>
+    <Product>Kasir SMK4</Product>
+    <Copyright>© 2024 SMK Negeri 4 Kabupaten Tangerang</Copyright>
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MySql.Data" Version="26.7.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <PackageReference Include="ReaLTaiizor" Version="3.8.2.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Credential database dibaca dari file ini, bukan dari kode C# -->
+    <!-- Semua file di Resources/ disalin ke output folder -->
+    <Content Include="Resources\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lokasi berkas database dibaca dari file ini, bukan dari kode C# -->
     <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Folder backup/ hanya berisi salinan arsip dan cuplikan database,
+         bukan bagian dari aplikasi. Tanpa pengecualian di bawah ini,
+         glob bawaan "**/*.resx" dan "**/*.cs" ikut mengambil berkas
+         di dalam folder itu. Akibatnya build gagal dengan MSB3577
+         "Two output file names resolved to the same output path"
+         karena Form1.resx ada dua kali. -->
+    <Compile Remove="backup\**" />
+    <EmbeddedResource Remove="backup\**" />
+    <None Remove="backup\**" />
+    <Content Remove="backup\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Skema SQLite ikut disalin ke folder build. Database.cs membacanya
+         saat pertama kali dijalankan untuk membentuk seluruh tabel. -->
+    <None Update="skema.sqlite.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Folder migrasi/ ikut disalin ke folder build. Database.cs
+         membacanya untuk menaikkan versi skema pada database yang
+         sudah ada. Salinan di folder build dipakai kalau ada, kalau
+         tidak ada dipakai folder sumber, supaya tetap jalan saat
+         dijalankan langsung dari Visual Studio. -->
+    <None Update="migrasi\**\*.sql">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
