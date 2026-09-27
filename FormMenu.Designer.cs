@@ -1,4 +1,4 @@
-﻿namespace AplikasiKasirSMK4
+namespace AplikasiKasirSMK4
 {
     partial class FormMenu
     {
@@ -19,6 +19,7 @@
             this.lblJudul = new System.Windows.Forms.Label();
             this.btnInputBarang = new ReaLTaiizor.Controls.HopeButton();
             this.btnKasir = new ReaLTaiizor.Controls.HopeButton();
+            this.btnLaporan = new ReaLTaiizor.Controls.HopeButton();
             this.btnLogout = new ReaLTaiizor.Controls.HopeButton();
             this.panelHeader.SuspendLayout();
             this.SuspendLayout();
@@ -37,37 +38,47 @@
             this.lblJudul.Text = "DASHBOARD ADMINISTRATOR";
 
             // btnInputBarang (Tombol Input Barang)
-            this.btnInputBarang.Font = new System.Drawing.Font("Segoe UI", 14F, System.Drawing.FontStyle.Bold);
-            this.btnInputBarang.Location = new System.Drawing.Point(50, 130);
+            this.btnInputBarang.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Bold);
+            this.btnInputBarang.Location = new System.Drawing.Point(40, 120);
             this.btnInputBarang.PrimaryColor = System.Drawing.Color.FromArgb(39, 174, 96);
-            this.btnInputBarang.Size = new System.Drawing.Size(300, 80);
+            this.btnInputBarang.Size = new System.Drawing.Size(220, 80);
             this.btnInputBarang.Text = "INPUT DATA BARANG";
             this.btnInputBarang.Click += new System.EventHandler(this.btnInputBarang_Click);
 
             // btnKasir
-            this.btnKasir.Font = new System.Drawing.Font("Segoe UI", 14F, System.Drawing.FontStyle.Bold);
-            this.btnKasir.Location = new System.Drawing.Point(380, 130);
+            this.btnKasir.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Bold);
+            this.btnKasir.Location = new System.Drawing.Point(280, 120);
             this.btnKasir.PrimaryColor = System.Drawing.Color.FromArgb(243, 156, 18);
-            this.btnKasir.Size = new System.Drawing.Size(300, 80);
+            this.btnKasir.Size = new System.Drawing.Size(220, 80);
             this.btnKasir.Text = "BUKA MESIN KASIR";
             this.btnKasir.Click += new System.EventHandler(this.btnKasir_Click);
 
+            // btnLaporan
+            this.btnLaporan.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Bold);
+            this.btnLaporan.Location = new System.Drawing.Point(520, 120);
+            this.btnLaporan.PrimaryColor = System.Drawing.Color.FromArgb(41, 128, 185);
+            this.btnLaporan.Size = new System.Drawing.Size(220, 80);
+            this.btnLaporan.Text = "LAPORAN PENJUALAN";
+            this.btnLaporan.Click += new System.EventHandler(this.btnLaporan_Click);
+
             // btnLogout
             this.btnLogout.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Bold);
-            this.btnLogout.Location = new System.Drawing.Point(50, 250);
+            this.btnLogout.Location = new System.Drawing.Point(40, 230);
             this.btnLogout.PrimaryColor = System.Drawing.Color.FromArgb(231, 76, 60);
-            this.btnLogout.Size = new System.Drawing.Size(630, 50);
+            this.btnLogout.Size = new System.Drawing.Size(700, 50);
             this.btnLogout.Text = "LOGOUT (KELUAR)";
             this.btnLogout.Click += new System.EventHandler(this.btnLogout_Click);
 
             // FormMenu
-            this.ClientSize = new System.Drawing.Size(730, 350);
+            this.ClientSize = new System.Drawing.Size(780, 320);
             this.Controls.Add(this.btnLogout);
+            this.Controls.Add(this.btnLaporan);
             this.Controls.Add(this.btnKasir);
             this.Controls.Add(this.btnInputBarang);
             this.Controls.Add(this.panelHeader);
             this.Name = "FormMenu";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
+            this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.Text = "Menu Utama - SMK Negeri 4";
             this.panelHeader.ResumeLayout(false);
             this.panelHeader.PerformLayout();
@@ -78,6 +89,7 @@
         private System.Windows.Forms.Label lblJudul;
         private ReaLTaiizor.Controls.HopeButton btnInputBarang;
         private ReaLTaiizor.Controls.HopeButton btnKasir;
+        private ReaLTaiizor.Controls.HopeButton btnLaporan;
         private ReaLTaiizor.Controls.HopeButton btnLogout;
     }
 }

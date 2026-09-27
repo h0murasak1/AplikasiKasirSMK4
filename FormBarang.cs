@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using MySql.Data.MySqlClient;
 
 namespace AplikasiKasirSMK4
@@ -7,10 +7,41 @@ namespace AplikasiKasirSMK4
     {
         private readonly Koneksi _koneksi = new();
 
+        /// <summary>Nilai satuan untuk barang yang benar-benar baru dibuat.</summary>
+        private const string SatuanBawaan = "pcs";
+
+        /// <summary>
+        /// Nilai maksimum yang aman untuk kolom DECIMAL(15,2).
+        /// 15 total digit dengan 2 di antaranya untuk pecahan.
+        /// </summary>
+        private const decimal BatasStokMaksimum = 9999999999999.99m;
+
+        private bool _isFormattingBeli;
+        private bool _isFormattingJual;
+        private bool _isFormattingStok;
+
         public FormBarang()
         {
             InitializeComponent();
             dgvBarang.CellFormatting += dgvBarang_CellFormatting;
+            txtHargaBeli.TextChanged += txtHargaBeli_TextChanged;
+            txtHargaJual.TextChanged += txtHargaJual_TextChanged;
+            txtStok.TextChanged += txtStok_TextChanged;
+        }
+
+        private void txtHargaBeli_TextChanged(object? sender, EventArgs e)
+        {
+            InputHelper.FormatRibuanOtomatis(txtHargaBeli, ref _isFormattingBeli);
+        }
+
+        private void txtHargaJual_TextChanged(object? sender, EventArgs e)
+        {
+            InputHelper.FormatRibuanOtomatis(txtHargaJual, ref _isFormattingJual);
+        }
+
+        private void txtStok_TextChanged(object? sender, EventArgs e)
+        {
+            InputHelper.FormatRibuanOtomatis(txtStok, ref _isFormattingStok);
         }
 
         private void FormBarang_Load(object sender, EventArgs e)
@@ -27,6 +58,7 @@ namespace AplikasiKasirSMK4
                 return;
             }
 
+            cmbSatuan.Text = SatuanBawaan;
             TampilData();
         }
 
@@ -40,10 +72,13 @@ namespace AplikasiKasirSMK4
                 using MySqlConnection conn = _koneksi.GetConn();
                 conn.Open();
 
+                // Barang yang sudah dinonaktifkan disembunyikan, bukan dihapus,
+                // agar riwayat transaksi lama tetap utuh.
                 const string query =
                     "SELECT kode_barcode AS 'Kode', nama_barang AS 'Nama Barang', "
-                    + "harga_beli AS 'Harga Beli', harga_jual AS 'Harga Jual', "
-                    + "stok AS 'Stok' FROM tb_barang ORDER BY nama_barang ASC";
+                    + "satuan AS 'Satuan', harga_beli AS 'Harga Beli', "
+                    + "harga_jual AS 'Harga Jual', stok AS 'Stok' "
+                    + "FROM tb_barang WHERE is_active = 1 ORDER BY nama_barang ASC";
 
                 using MySqlDataAdapter adapter = new(query, conn);
                 DataTable dt = new();
@@ -67,6 +102,7 @@ namespace AplikasiKasirSMK4
         {
             txtKode.Text = string.Empty;
             txtNama.Text = string.Empty;
+            cmbSatuan.Text = SatuanBawaan;
             txtHargaBeli.Text = string.Empty;
             txtHargaJual.Text = string.Empty;
             txtStok.Text = string.Empty;
@@ -74,14 +110,19 @@ namespace AplikasiKasirSMK4
             txtKode.Focus();
         }
 
-        private bool AmbilInput(out string kode, out string nama, out decimal hargaBeli,
-            out decimal hargaJual, out int stok)
+        private bool AmbilInput(out string kode, out string nama, out string satuan,
+            out decimal hargaBeli, out decimal hargaJual, out decimal stok)
         {
             kode = txtKode.Text.Trim();
             nama = txtNama.Text.Trim();
+            satuan = cmbSatuan.Text.Trim();
+            if (satuan.Length == 0)
+            {
+                satuan = SatuanBawaan;
+            }
             hargaBeli = 0m;
             hargaJual = 0m;
-            stok = 0;
+            stok = 0m;
 
             if (kode.Length == 0)
             {
@@ -128,7 +169,7 @@ namespace AplikasiKasirSMK4
                 return false;
             }
 
-            if (!InputHelper.TryParseNominal(txtStok.Text, out decimal stokTemp, out string pesanStok))
+            if (!InputHelper.TryParseNominal(txtStok.Text, out stok, out string pesanStok))
             {
                 MessageBox.Show("Jumlah stok tidak valid: " + pesanStok + ".", "Peringatan",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -136,15 +177,23 @@ namespace AplikasiKasirSMK4
                 return false;
             }
 
-            if (stokTemp != decimal.Truncate(stokTemp))
+            if (stok < 0m)
             {
-                MessageBox.Show("Jumlah stok harus berupa bilangan bulat!", "Peringatan",
+                MessageBox.Show("Jumlah stok tidak boleh negatif!", "Peringatan",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 txtStok.Focus();
                 return false;
             }
 
-            if (stokTemp > int.MaxValue)
+            if (stok != Math.Floor(stok))
+            {
+                MessageBox.Show("Jumlah stok harus berupa bilangan bulat (tanpa pecahan/koma)!", "Peringatan",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txtStok.Focus();
+                return false;
+            }
+
+            if (stok > BatasStokMaksimum)
             {
                 MessageBox.Show("Jumlah stok terlalu besar!", "Peringatan",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -152,18 +201,7 @@ namespace AplikasiKasirSMK4
                 return false;
             }
 
-            stok = (int)stokTemp;
             return true;
-        }
-
-        private static bool KodeSudahAda(MySqlConnection conn, string kode)
-        {
-            const string query = "SELECT COUNT(*) FROM tb_barang WHERE kode_barcode = @kode";
-
-            using MySqlCommand cmd = new(query, conn);
-            cmd.Parameters.AddWithValue("@kode", kode);
-
-            return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
         }
 
         // ------------------------------------------------------------------
@@ -171,8 +209,8 @@ namespace AplikasiKasirSMK4
         // ------------------------------------------------------------------
         private void btnSimpan_Click(object sender, EventArgs e)
         {
-            if (!AmbilInput(out string kode, out string nama, out decimal hargaBeli,
-                    out decimal hargaJual, out int stok))
+            if (!AmbilInput(out string kode, out string nama, out string satuan,
+                    out decimal hargaBeli, out decimal hargaJual, out decimal stok))
             {
                 return;
             }
@@ -182,7 +220,33 @@ namespace AplikasiKasirSMK4
                 using MySqlConnection conn = _koneksi.GetConn();
                 conn.Open();
 
-                // Cegah kode barcode duplikat dengan pesan yang jelas.
+                // Kode barcode pernah dipakai dan barangnya dinonaktifkan?
+                // Kalau ya, tawarkan untuk mengaktifkan kembali daripada
+                // gagal dengan pesan "kode sudah dipakai".
+                if (KodeSudahDipakaiNonaktif(conn, kode))
+                {
+                    DialogResult pilihan = MessageBox.Show(
+                        "Kode barcode \"" + kode + "\" pernah dipakai barang yang "
+                        + "sekarang dinonaktifkan.\n"
+                        + "Aktifkan kembali barang ini dengan data yang baru?",
+                        "Kode Sudah Dipakai",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question);
+
+                    if (pilihan != DialogResult.Yes)
+                    {
+                        txtKode.Focus();
+                        txtKode.SelectAll();
+                        return;
+                    }
+
+                    AktifkanKembali(conn, kode, nama, satuan, hargaBeli, hargaJual, stok);
+                    TampilkanSukses("Barang \"" + nama + "\" berhasil diaktifkan kembali!");
+                    BersihkanForm();
+                    TampilData();
+                    return;
+                }
+
                 if (KodeSudahAda(conn, kode))
                 {
                     MessageBox.Show(
@@ -198,19 +262,24 @@ namespace AplikasiKasirSMK4
 
                 const string query =
                     "INSERT INTO tb_barang "
-                    + "(kode_barcode, nama_barang, harga_beli, harga_jual, stok) "
-                    + "VALUES (@kode, @nama, @hargaBeli, @hargaJual, @stok)";
+                    + "(kode_barcode, nama_barang, satuan, harga_beli, harga_jual, stok, is_active) "
+                    + "VALUES (@kode, @nama, @satuan, @hargaBeli, @hargaJual, @stok, 1)";
 
-                using MySqlCommand cmd = new(query, conn);
-                cmd.Parameters.AddWithValue("@kode", kode);
-                cmd.Parameters.AddWithValue("@nama", nama);
-                cmd.Parameters.AddWithValue("@hargaBeli", hargaBeli);
-                cmd.Parameters.AddWithValue("@hargaJual", hargaJual);
-                cmd.Parameters.AddWithValue("@stok", stok);
-                cmd.ExecuteNonQuery();
+                using (MySqlCommand cmd = new(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@kode", kode);
+                    cmd.Parameters.AddWithValue("@nama", nama);
+                    cmd.Parameters.AddWithValue("@satuan", satuan);
+                    cmd.Parameters.AddWithValue("@hargaBeli", hargaBeli);
+                    cmd.Parameters.AddWithValue("@hargaJual", hargaJual);
+                    cmd.Parameters.AddWithValue("@stok", stok);
+                    cmd.ExecuteNonQuery();
+                }
 
-                MessageBox.Show("Data barang berhasil ditambahkan!", "Sukses",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // Barang baru = stok MASUK, dicatat di riwayat mutasi.
+                CatatMutasiStok(conn, kode, "MASUK", stok, stok, "Barang baru", null);
+
+                TampilkanSukses("Data barang berhasil ditambahkan!");
 
                 BersihkanForm();
                 TampilData();
@@ -228,6 +297,102 @@ namespace AplikasiKasirSMK4
                 MessageBox.Show("Gagal menyimpan data: " + ex.Message, "Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private static void TampilkanSukses(string pesan)
+        {
+            MessageBox.Show(pesan, "Sukses",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private static bool KodeSudahAda(MySqlConnection conn, string kode)
+        {
+            const string query = "SELECT COUNT(*) FROM tb_barang WHERE kode_barcode = @kode";
+
+            using MySqlCommand cmd = new(query, conn);
+            cmd.Parameters.AddWithValue("@kode", kode);
+
+            return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+        }
+
+        private static bool KodeSudahDipakaiNonaktif(MySqlConnection conn, string kode)
+        {
+            const string query =
+                "SELECT COUNT(*) FROM tb_barang WHERE kode_barcode = @kode AND is_active = 0";
+
+            using MySqlCommand cmd = new(query, conn);
+            cmd.Parameters.AddWithValue("@kode", kode);
+
+            return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+        }
+
+        private static void AktifkanKembali(
+            MySqlConnection conn, string kode, string nama, string satuan,
+            decimal hargaBeli, decimal hargaJual, decimal stok)
+        {
+            decimal stokLama = BacaStok(conn, kode);
+
+            const string query =
+                "UPDATE tb_barang SET nama_barang = @nama, satuan = @satuan, "
+                + "harga_beli = @hargaBeli, harga_jual = @hargaJual, stok = @stok, "
+                + "is_active = 1 WHERE kode_barcode = @kode";
+
+            using MySqlCommand cmd = new(query, conn);
+            cmd.Parameters.AddWithValue("@nama", nama);
+            cmd.Parameters.AddWithValue("@satuan", satuan);
+            cmd.Parameters.AddWithValue("@hargaBeli", hargaBeli);
+            cmd.Parameters.AddWithValue("@hargaJual", hargaJual);
+            cmd.Parameters.AddWithValue("@stok", stok);
+            cmd.Parameters.AddWithValue("@kode", kode);
+            cmd.ExecuteNonQuery();
+
+            // Yang dicatat adalah selisihnya, bukan seluruh stok. Kalau stok
+            // lama 99 lalu diisi 50, riwayatnya harus menunjukkan -49.
+            decimal selisih = stok - stokLama;
+            if (selisih != 0m)
+            {
+                CatatMutasiStok(conn, kode, "MASUK", selisih, stok,
+                    "Barang diaktifkan kembali", null);
+            }
+        }
+
+        /// <summary>
+        /// Membaca satuan barang. Mengembalikan <see cref="SatuanBawaan"/> bila
+        /// barcode tidak ditemukan atau satuan kosong.
+        /// </summary>
+        private static string BacaSatuan(MySqlConnection conn, string kode)
+        {
+            using MySqlCommand cmd = new(
+                "SELECT satuan FROM tb_barang WHERE kode_barcode = @kode", conn);
+            cmd.Parameters.AddWithValue("@kode", kode);
+
+            return Convert.ToString(cmd.ExecuteScalar()) is { Length: > 0 } s
+                ? s
+                : SatuanBawaan;
+        }
+
+        /// <summary>
+        /// Mencatat satu perubahan stok ke tb_mutasi_stok supaya bisa ditelusuri
+        /// kenapa stok suatu barang berubah. qty positif berarti stok bertambah.
+        /// </summary>
+        private static void CatatMutasiStok(
+            MySqlConnection conn, string kode, string tipe, decimal qty,
+            decimal stokAkhir, string keterangan, MySqlTransaction? transaksi)
+        {
+            const string query =
+                "INSERT INTO tb_mutasi_stok "
+                + "(kode_barcode, tipe, qty, stok_akhir, keterangan, id_user) "
+                + "VALUES (@kode, @tipe, @qty, @stokAkhir, @keterangan, @idUser)";
+
+            using MySqlCommand cmd = new(query, conn, transaksi);
+            cmd.Parameters.AddWithValue("@kode", kode);
+            cmd.Parameters.AddWithValue("@tipe", tipe);
+            cmd.Parameters.AddWithValue("@qty", qty);
+            cmd.Parameters.AddWithValue("@stokAkhir", stokAkhir);
+            cmd.Parameters.AddWithValue("@keterangan", keterangan);
+            cmd.Parameters.AddWithValue("@idUser",
+                Session.IsLoggedIn ? Session.UserId : (object)DBNull.Value);
+            cmd.ExecuteNonQuery();
         }
 
         // ------------------------------------------------------------------
@@ -248,24 +413,21 @@ namespace AplikasiKasirSMK4
 
             txtKode.Text = Convert.ToString(data["Kode"]) ?? string.Empty;
             txtNama.Text = Convert.ToString(data["Nama Barang"]) ?? string.Empty;
-            txtHargaBeli.Text = FormatNilaiKoma(data["Harga Beli"]);
-            txtHargaJual.Text = FormatNilaiKoma(data["Harga Jual"]);
-            txtStok.Text = FormatNilaiKoma(data["Stok"]);
+            cmbSatuan.Text = Convert.ToString(data["Satuan"]) is { Length: > 0 } s ? s : SatuanBawaan;
+            txtHargaBeli.Text = FormatNilaiRibuan(data["Harga Beli"]);
+            txtHargaJual.Text = FormatNilaiRibuan(data["Harga Jual"]);
+            txtStok.Text = FormatNilaiRibuan(data["Stok"]);
 
             // Kode barcode dikunci saat mode edit.
             txtKode.Enabled = false;
             txtNama.Focus();
         }
 
-        private static string FormatNilaiKoma(object? nilai)
+        private static string FormatNilaiRibuan(object? nilai)
         {
-            return nilai switch
-            {
-                null => string.Empty,
-                decimal d => d.ToString("0.##"),
-                int i => i.ToString(),
-                _ => nilai.ToString() ?? string.Empty
-            };
+            if (nilai is null || nilai == DBNull.Value) return string.Empty;
+            decimal d = InputHelper.AmbilDecimal(nilai);
+            return d.ToString("N0", new System.Globalization.CultureInfo("id-ID"));
         }
 
         // ------------------------------------------------------------------
@@ -283,8 +445,8 @@ namespace AplikasiKasirSMK4
                 return;
             }
 
-            if (!AmbilInput(out string kode, out string nama, out decimal hargaBeli,
-                    out decimal hargaJual, out int stok))
+            if (!AmbilInput(out string kode, out string nama, out string satuan,
+                    out decimal hargaBeli, out decimal hargaJual, out decimal stok))
             {
                 return;
             }
@@ -294,31 +456,46 @@ namespace AplikasiKasirSMK4
                 using MySqlConnection conn = _koneksi.GetConn();
                 conn.Open();
 
-                const string query =
-                    "UPDATE tb_barang SET nama_barang = @nama, harga_beli = @hargaBeli, "
-                    + "harga_jual = @hargaJual, stok = @stok WHERE kode_barcode = @kode";
-
-                using MySqlCommand cmd = new(query, conn);
-                cmd.Parameters.AddWithValue("@nama", nama);
-                cmd.Parameters.AddWithValue("@hargaBeli", hargaBeli);
-                cmd.Parameters.AddWithValue("@hargaJual", hargaJual);
-                cmd.Parameters.AddWithValue("@stok", stok);
-                cmd.Parameters.AddWithValue("@kode", kode);
-
-                int affected = cmd.ExecuteNonQuery();
-                if (affected == 0)
+                decimal stokLama = BacaStok(conn, kode);
+                if (stokLama < 0m)
                 {
                     MessageBox.Show(
-                        "Data tidak ditemukan. Silakan pilih ulang dari tabel.",
+                        "Data \"" + kode + "\" tidak ditemukan. Silakan pilih ulang dari tabel.",
                         "Peringatan",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
+                    txtKode.Enabled = true;
+                    BersihkanForm();
+                    TampilData();
+                    return;
                 }
-                else
+
+                // Stok boleh naik-turun, jadi selisihnya dicatat sebagai
+                // PENYESUAIAN (hasil opname, barang rusak, atau tak laku).
+                const string query =
+                    "UPDATE tb_barang SET nama_barang = @nama, satuan = @satuan, "
+                    + "harga_beli = @hargaBeli, harga_jual = @hargaJual, stok = @stok "
+                    + "WHERE kode_barcode = @kode";
+
+                using (MySqlCommand cmd = new(query, conn))
                 {
-                    MessageBox.Show("Data barang berhasil diperbarui!", "Sukses",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    cmd.Parameters.AddWithValue("@nama", nama);
+                    cmd.Parameters.AddWithValue("@satuan", satuan);
+                    cmd.Parameters.AddWithValue("@hargaBeli", hargaBeli);
+                    cmd.Parameters.AddWithValue("@hargaJual", hargaJual);
+                    cmd.Parameters.AddWithValue("@stok", stok);
+                    cmd.Parameters.AddWithValue("@kode", kode);
+                    cmd.ExecuteNonQuery();
                 }
+
+                decimal selisih = stok - stokLama;
+                if (selisih != 0m)
+                {
+                    CatatMutasiStok(conn, kode, "PENYESUAIAN", selisih, stok,
+                        "Koreksi stok oleh admin", null);
+                }
+
+                TampilkanSukses("Data barang berhasil diperbarui!");
 
                 txtKode.Enabled = true;
                 BersihkanForm();
@@ -331,8 +508,22 @@ namespace AplikasiKasirSMK4
             }
         }
 
+        /// <summary>
+        /// Membaca stok terkini. Mengembalikan -1 bila barcode tidak ditemukan,
+        /// karena nilai stok di database tidak mungkin negatif (ada CHECK).
+        /// </summary>
+        private static decimal BacaStok(MySqlConnection conn, string kode)
+        {
+            using MySqlCommand cmd = new(
+                "SELECT stok FROM tb_barang WHERE kode_barcode = @kode", conn);
+            cmd.Parameters.AddWithValue("@kode", kode);
+
+            object? hasil = cmd.ExecuteScalar();
+            return hasil is null ? -1m : InputHelper.AmbilDecimal(hasil);
+        }
+
         // ------------------------------------------------------------------
-        // DELETE
+        // NONAKTIFKAN (soft delete)
         // ------------------------------------------------------------------
         private void btnHapus_Click(object sender, EventArgs e)
         {
@@ -347,8 +538,11 @@ namespace AplikasiKasirSMK4
             }
 
             DialogResult konfirmasi = MessageBox.Show(
-                "Apakah Anda yakin ingin menghapus barang \"" + txtNama.Text + "\"?\n"
-                + "Data transaksi lama tidak ikut terhapus.",
+                "Apakah Anda yakin ingin menonaktifkan barang \"" + txtNama.Text + "\"?\n\n"
+                + "Barang tidak akan muncul lagi di daftar dan tidak bisa dijual,\n"
+                + "tetapi seluruh riwayat transaksi lamanya tetap tersimpan.\n"
+                + "Barang bisa diaktifkan kembali kapan saja dengan menekan SIMPAN\n"
+                + "lalu mengisi kode barcode yang sama.",
                 "Konfirmasi Hapus",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
@@ -363,30 +557,24 @@ namespace AplikasiKasirSMK4
                 using MySqlConnection conn = _koneksi.GetConn();
                 conn.Open();
 
-                const string query = "DELETE FROM tb_barang WHERE kode_barcode = @kode";
+                // Delete logis, bukan DELETE FROM. Ini wajib karena tb_detail_transaksi
+                // punya foreign key ke tb_barang dengan ON DELETE RESTRICT.
+                const string query =
+                    "UPDATE tb_barang SET is_active = 0 WHERE kode_barcode = @kode";
+
                 using MySqlCommand cmd = new(query, conn);
                 cmd.Parameters.AddWithValue("@kode", txtKode.Text.Trim());
                 cmd.ExecuteNonQuery();
 
-                MessageBox.Show("Data berhasil dihapus!", "Sukses",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                TampilkanSukses("Barang dinonaktifkan dan disembunyikan dari daftar.");
 
                 txtKode.Enabled = true;
                 BersihkanForm();
                 TampilData();
             }
-            catch (MySqlException ex) when (ex.Number == 1451)
-            {
-                // Foreign key constraint: barang masih dipakai di transaksi.
-                MessageBox.Show(
-                    "Barang tidak bisa dihapus karena sudah dipakai pada transaksi sebelumnya.",
-                    "Peringatan",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-            }
             catch (Exception ex)
             {
-                MessageBox.Show("Gagal menghapus data: " + ex.Message, "Error",
+                MessageBox.Show("Gagal menonaktifkan data: " + ex.Message, "Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -407,7 +595,10 @@ namespace AplikasiKasirSMK4
                 return;
             }
 
-            if (dgvBarang.Columns[e.ColumnIndex].Name is not ("Harga Beli" or "Harga Jual" or "Stok"))
+            string namaKolom = dgvBarang.Columns[e.ColumnIndex].Name;
+
+            // Kolom harga berisi rupiah, kolom stok berisi jumlah barang.
+            if (namaKolom is not ("Harga Beli" or "Harga Jual" or "Stok"))
             {
                 return;
             }
@@ -419,7 +610,10 @@ namespace AplikasiKasirSMK4
             }
 
             decimal angka = InputHelper.AmbilDecimal(nilai);
-            e.Value = InputHelper.FormatNominal(angka);
+
+            e.Value = namaKolom == "Stok"
+                ? InputHelper.FormatJumlah(angka)
+                : InputHelper.FormatNominal(angka);
             e.FormattingApplied = true;
         }
     }

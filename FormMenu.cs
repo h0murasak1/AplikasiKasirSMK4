@@ -1,4 +1,4 @@
-﻿namespace AplikasiKasirSMK4
+namespace AplikasiKasirSMK4
 {
     public partial class FormMenu : Form
     {
@@ -8,6 +8,7 @@
         {
             InitializeComponent();
             Load += FormMenu_Load;
+            Resize += FormMenu_Resize;
             FormClosing += FormMenu_FormClosing;
         }
 
@@ -22,7 +23,31 @@
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
                 Close();
+                return;
             }
+
+            PusatkanMenu();
+        }
+
+        private void FormMenu_Resize(object? sender, EventArgs e)
+        {
+            PusatkanMenu();
+        }
+
+        private void PusatkanMenu()
+        {
+            int totalWidth = 700;
+            int totalHeight = 160;
+
+            int startX = Math.Max(40, (ClientSize.Width - totalWidth) / 2);
+            int startY = Math.Max(panelHeader.Height + 30,
+                panelHeader.Height + (ClientSize.Height - panelHeader.Height - totalHeight) / 2);
+
+            btnInputBarang.Location = new Point(startX, startY);
+            btnKasir.Location = new Point(startX + 240, startY);
+            btnLaporan.Location = new Point(startX + 480, startY);
+            btnLogout.Location = new Point(startX, startY + 110);
+            btnLogout.Width = totalWidth;
         }
 
         private void btnInputBarang_Click(object sender, EventArgs e)
@@ -45,6 +70,16 @@
 
             // Dibuka dari dashboard, jadi bukan form root (IsRootForm = false).
             new FormKasir { IsRootForm = false }.Show(this);
+        }
+
+        private void btnLaporan_Click(object sender, EventArgs e)
+        {
+            if (SudahTerbuka(typeof(FormLaporan)))
+            {
+                return;
+            }
+
+            new FormLaporan().Show(this);
         }
 
         private void btnLogout_Click(object sender, EventArgs e)

@@ -15,15 +15,7 @@ namespace AplikasiKasirSMK4
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            if (_koneksi.TestConnection(out string pesanError))
-            {
-                MessageBox.Show(
-                    "Koneksi ke Database MySQL Berhasil!",
-                    "Informasi",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
-            }
-            else
+            if (!_koneksi.TestConnection(out string pesanError))
             {
                 MessageBox.Show(
                     "Koneksi Gagal. Pastikan XAMPP/MySQL sudah berjalan!\n\n"
@@ -58,7 +50,7 @@ namespace AplikasiKasirSMK4
                 conn.Open();
 
                 using MySqlCommand cmd = new(
-                    "SELECT id_user, password, nama_lengkap, role "
+                    "SELECT id_user, password, nama_lengkap, role, is_active "
                     + "FROM tb_user WHERE username = @username LIMIT 1",
                     conn);
                 cmd.Parameters.AddWithValue("@username", username);
@@ -67,6 +59,7 @@ namespace AplikasiKasirSMK4
                 string passwordTersimpan;
                 string namaLengkap;
                 string role;
+                bool akunAktif;
 
                 using (MySqlDataReader reader = cmd.ExecuteReader())
                 {
@@ -83,6 +76,7 @@ namespace AplikasiKasirSMK4
                     passwordTersimpan = reader["password"]?.ToString() ?? string.Empty;
                     namaLengkap = reader["nama_lengkap"]?.ToString() ?? username;
                     role = reader["role"]?.ToString() ?? string.Empty;
+                    akunAktif = InputHelper.AmbilDecimal(reader["is_active"]) == 1m;
                 }
 
                 // Verifikasi password (mendukung hash baru dan password lama)
@@ -96,6 +90,19 @@ namespace AplikasiKasirSMK4
                 if (!PasswordHasher.IsHashed(passwordTersimpan))
                 {
                     UpgradePasswordHash(conn, idUser, password);
+                }
+
+                // Akun yang dinonaktifkan admin tetap dianggap passwordnya benar,
+                // tetapi tidak boleh masuk ke aplikasi.
+                if (!akunAktif)
+                {
+                    MessageBox.Show(
+                        "Akun \"" + username + "\" sudah dinonaktifkan oleh administrator.\n"
+                        + "Hubungi administrator untuk mengaktifkannya kembali.",
+                        "Akun Nonaktif",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
                 }
 
                 // Role yang tidak dikenal ditolak agar tidak ada akses tanpa hak.

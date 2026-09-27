@@ -1,4 +1,4 @@
-﻿namespace AplikasiKasirSMK4
+namespace AplikasiKasirSMK4
 {
     partial class FormBarang
     {
@@ -76,6 +76,11 @@
             this.panelKiri.Width = 350;
             this.panelKiri.Padding = new System.Windows.Forms.Padding(20);
 
+            this.lblSatuan = new System.Windows.Forms.Label();
+            this.cmbSatuan = new System.Windows.Forms.ComboBox();
+            this.panelKiri.Controls.Add(this.lblSatuan);
+            this.panelKiri.Controls.Add(this.cmbSatuan);
+
             // lblKode & txtKode
             this.lblKode.AutoSize = true;
             this.lblKode.Font = new System.Drawing.Font("Segoe UI", 10F);
@@ -148,8 +153,23 @@
             this.txtStok.ForeColor = System.Drawing.Color.FromArgb(48, 49, 51);
             this.txtStok.Font = new System.Drawing.Font("Segoe UI", 12F);
             this.txtStok.Location = new System.Drawing.Point(20, 325);
-            this.txtStok.Width = 310;
+            this.txtStok.Width = 145;
             this.txtStok.Height = 38;
+
+            // lblSatuan & cmbSatuan
+            this.lblSatuan.AutoSize = true;
+            this.lblSatuan.Font = new System.Drawing.Font("Segoe UI", 10F);
+            this.lblSatuan.Location = new System.Drawing.Point(180, 300);
+            this.lblSatuan.Text = "Satuan";
+            this.cmbSatuan.BackColor = System.Drawing.Color.White;
+            this.cmbSatuan.ForeColor = System.Drawing.Color.FromArgb(48, 49, 51);
+            this.cmbSatuan.Font = new System.Drawing.Font("Segoe UI", 11F);
+            this.cmbSatuan.Location = new System.Drawing.Point(180, 328);
+            this.cmbSatuan.Width = 150;
+            this.cmbSatuan.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDown;
+            this.cmbSatuan.Items.AddRange(new object[] {
+                "pcs", "kg", "gram", "liter", "box", "lusin", "pack", "botol", "bungkus", "porsi", "lembar"
+            });
 
             // Tombol-Tombol
             this.btnSimpan.Location = new System.Drawing.Point(20, 390);
@@ -233,6 +253,8 @@
         private ReaLTaiizor.Controls.HopeTextBox txtHargaJual;
         private System.Windows.Forms.Label lblStok;
         private ReaLTaiizor.Controls.HopeTextBox txtStok;
+        private System.Windows.Forms.Label lblSatuan;
+        private System.Windows.Forms.ComboBox cmbSatuan;
         private ReaLTaiizor.Controls.HopeButton btnSimpan;
         private ReaLTaiizor.Controls.HopeButton btnEdit;
         private ReaLTaiizor.Controls.HopeButton btnHapus;

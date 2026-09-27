@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using MySql.Data.MySqlClient;
 
 namespace AplikasiKasirSMK4
@@ -23,6 +23,7 @@ namespace AplikasiKasirSMK4
             FormClosing += FormKasir_FormClosing;
             dgvKeranjang.CellFormatting += dgvKeranjang_CellFormatting;
             dgvKeranjang.CellDoubleClick += dgvKeranjang_CellDoubleClick;
+            PasangMenuKlikKananKeranjang();
         }
 
         private void FormKasir_Load(object? sender, EventArgs e)
@@ -67,17 +68,18 @@ namespace AplikasiKasirSMK4
         {
             string nama;
             decimal harga;
-            int stokTersedia;
+            decimal stokTersedia;
 
             try
             {
                 using MySqlConnection conn = _koneksi.GetConn();
                 conn.Open();
 
-                // Tidak memakai SELECT * agar tidak bergantung urutan kolom.
+                // Barang non-aktif tidak boleh lagi dijual meskipun barcode-nya
+                // masih tersimpan di database.
                 const string query =
                     "SELECT nama_barang, harga_jual, stok FROM tb_barang "
-                    + "WHERE kode_barcode = @kode LIMIT 1";
+                    + "WHERE kode_barcode = @kode AND is_active = 1 LIMIT 1";
 
                 using MySqlCommand cmd = new(query, conn);
                 cmd.Parameters.AddWithValue("@kode", kode);
@@ -91,7 +93,7 @@ namespace AplikasiKasirSMK4
 
                 nama = reader["nama_barang"]?.ToString() ?? string.Empty;
                 harga = InputHelper.AmbilDecimal(reader["harga_jual"]);
-                stokTersedia = InputHelper.AmbilInt(reader["stok"]);
+                stokTersedia = InputHelper.AmbilDecimal(reader["stok"]);
             }
             catch (Exception ex)
             {
@@ -106,33 +108,33 @@ namespace AplikasiKasirSMK4
                 return;
             }
 
-            int qtyTersedia = AmbilQtyKeranjang(kode);
+            decimal qtyDiKeranjang = AmbilQtyKeranjang(kode);
 
             // Validasi stok: barang dengan stok 0 tidak boleh masuk keranjang,
             // dan total qty tidak boleh melebihi stok tersedia.
-            if (stokTersedia <= 0)
+            if (stokTersedia <= 0m)
             {
                 TampilkanPeringatan("Stok barang \"" + nama + "\" habis!");
                 return;
             }
 
-            if (qtyTersedia + 1 > stokTersedia)
+            if (qtyDiKeranjang + 1m > stokTersedia)
             {
                 TampilkanPeringatan(
                     "Stok \"" + nama + "\" tidak cukup!\n"
-                    + "Stok tersedia: " + stokTersedia
-                    + ", sudah di keranjang: " + qtyTersedia + ".");
+                    + "Stok tersedia: " + InputHelper.FormatJumlah(stokTersedia)
+                    + ", sudah di keranjang: " + InputHelper.FormatJumlah(qtyDiKeranjang) + ".");
                 return;
             }
 
-            if (qtyTersedia > 0)
+            if (qtyDiKeranjang > 0m)
             {
                 // Barang sudah ada di keranjang -> tambahkan qty saja.
-                PerbaruiBarisKeranjang(kode, qtyTersedia + 1);
+                PerbaruiBarisKeranjang(kode, qtyDiKeranjang + 1m);
             }
             else
             {
-                dgvKeranjang.Rows.Add(kode, nama, harga, 1, harga);
+                dgvKeranjang.Rows.Add(kode, nama, harga, 1m, harga);
             }
 
             HitungTotalBelanja();
@@ -152,7 +154,7 @@ namespace AplikasiKasirSMK4
         }
 
         /// <summary>Mengembalikan qty barang tertentu yang sudah ada di keranjang.</summary>
-        private int AmbilQtyKeranjang(string kode)
+        private decimal AmbilQtyKeranjang(string kode)
         {
             foreach (DataGridViewRow row in dgvKeranjang.Rows)
             {
@@ -164,14 +166,14 @@ namespace AplikasiKasirSMK4
                 if (string.Equals(row.Cells[0].Value?.ToString(), kode,
                         StringComparison.OrdinalIgnoreCase))
                 {
-                    return InputHelper.AmbilInt(row.Cells[3].Value);
+                    return InputHelper.AmbilDecimal(row.Cells[3].Value);
                 }
             }
 
-            return 0;
+            return 0m;
         }
 
-        private void PerbaruiBarisKeranjang(string kode, int qtyBaru)
+        private void PerbaruiBarisKeranjang(string kode, decimal qtyBaru)
         {
             foreach (DataGridViewRow row in dgvKeranjang.Rows)
             {
@@ -188,24 +190,145 @@ namespace AplikasiKasirSMK4
 
                 decimal harga = InputHelper.AmbilDecimal(row.Cells[2].Value);
                 row.Cells[3].Value = qtyBaru;
-                row.Cells[4].Value = harga * qtyBaru;
+                row.Cells[4].Value = BulatkanSubtotal(harga * qtyBaru);
                 dgvKeranjang.Refresh();
                 return;
             }
         }
 
-        // =========================================================
-        // 2. HAPUS ITEM (double click pada baris keranjang)
-        // =========================================================
-        private void dgvKeranjang_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+        /// <summary>
+        /// Subtotal dibulatkan ke 2 desimal agar tampilan sama dengan nilai
+        /// yang benar-benar disimpan di database (DECIMAL(15,2)).
+        /// Tanpa ini, 3 x 333,33 bisa tampil 999,99 tetapi tersimpan 999,989.
+        /// </summary>
+        internal static decimal BulatkanSubtotal(decimal nilai)
         {
-            if (e.RowIndex < 0)
+            return Math.Round(nilai, 2, MidpointRounding.AwayFromZero);
+        }
+
+        // =========================================================
+        // 2. UBAH QTY / HAPUS ITEM
+        // =========================================================
+
+        /// <summary>
+        /// Memasang menu klik kanan pada keranjang. Menu ini menggantikan
+        /// kebutuhan memindai barcode berulang kali hanya untuk menambah qty.
+        /// </summary>
+        private void PasangMenuKlikKananKeranjang()
+        {
+            ContextMenuStrip menu = new();
+            menu.Font = new Font("Segoe UI", 10F);
+
+            ToolStripMenuItem itemUbahQty = new("Ubah Jumlah...");
+            itemUbahQty.Click += (_, _) => UbahQtyBarisDipilih();
+
+            ToolStripMenuItem itemHapus = new("Hapus Item");
+            itemHapus.Click += (_, _) => HapusBarisDipilih();
+
+            menu.Items.Add(itemUbahQty);
+            menu.Items.Add(itemHapus);
+            menu.Opening += (_, e) =>
+            {
+                bool adaBaris = AmbilBarisDipilih() is not null;
+                itemUbahQty.Enabled = adaBaris;
+                itemHapus.Enabled = adaBaris;
+                e.Cancel = !adaBaris;
+            };
+
+            dgvKeranjang.ContextMenuStrip = menu;
+        }
+
+        /// <summary>
+        /// Mengambil baris yang sedang dipilih, atau null bila tidak ada.
+        /// </summary>
+        private DataGridViewRow? AmbilBarisDipilih()
+        {
+            if (dgvKeranjang.CurrentCell is null)
+            {
+                return null;
+            }
+
+            DataGridViewRow row = dgvKeranjang.Rows[dgvKeranjang.CurrentCell.RowIndex];
+            return row.IsNewRow ? null : row;
+        }
+
+        private void UbahQtyBarisDipilih()
+        {
+            DataGridViewRow? row = AmbilBarisDipilih();
+            if (row is null)
             {
                 return;
             }
 
-            DataGridViewRow row = dgvKeranjang.Rows[e.RowIndex];
-            if (row.IsNewRow)
+            string kode = row.Cells[0].Value?.ToString() ?? string.Empty;
+            string nama = row.Cells[1].Value?.ToString() ?? "(tanpa nama)";
+            decimal qtyLama = InputHelper.AmbilDecimal(row.Cells[3].Value);
+
+            // Stok terbaru dibaca dari database supaya angka yang dikoreksi
+            // kasir tidak melebihi stok yang benar-benar ada.
+            decimal stokTersedia;
+            try
+            {
+                using MySqlConnection conn = _koneksi.GetConn();
+                conn.Open();
+
+                using MySqlCommand cmd = new(
+                    "SELECT stok FROM tb_barang WHERE kode_barcode = @kode AND is_active = 1",
+                    conn);
+                cmd.Parameters.AddWithValue("@kode", kode);
+
+                object? hasil = cmd.ExecuteScalar();
+                if (hasil is null)
+                {
+                    TampilkanPeringatan("Barang \"" + nama + "\" tidak lagi bisa dijual.");
+                    return;
+                }
+
+                stokTersedia = InputHelper.AmbilDecimal(hasil);
+            }
+            catch (Exception ex)
+            {
+                TampilkanPeringatan("Gagal membaca stok: " + ex.Message);
+                return;
+            }
+
+            if (!InputDialog.Tanyakan(
+                    "Ubah Jumlah",
+                    "Jumlah \"" + nama + "\" (stok: " + InputHelper.FormatJumlah(stokTersedia) + ")",
+                    InputHelper.FormatJumlah(qtyLama),
+                    "Masukkan jumlah item (angka bulat, minimal 1). Maksimal: "
+                        + InputHelper.FormatJumlah(stokTersedia),
+                    out string masukan))
+            {
+                return;
+            }
+
+            // Validasi: Qty hanya boleh berupa bilangan bulat positif (minimal 1)
+            string cleanMasukan = masukan.Trim().Replace(".", "").Replace(",", "");
+            if (!int.TryParse(cleanMasukan, out int qtyInt) || qtyInt <= 0)
+            {
+                TampilkanPeringatan("Jumlah barang harus berupa bilangan bulat positif (minimal 1)!");
+                return;
+            }
+
+            decimal qtyBaru = qtyInt;
+            if (qtyBaru > stokTersedia)
+            {
+                TampilkanPeringatan(
+                    "Jumlah melebihi stok tersedia.\n"
+                    + "Stok \"" + nama + "\": " + InputHelper.FormatJumlah(stokTersedia));
+                return;
+            }
+
+            PerbaruiBarisKeranjang(kode, qtyBaru);
+            HitungTotalBelanja();
+            txtBarcode.Focus();
+        }
+
+        private void HapusBarisDipilih()
+        {
+            DataGridViewRow? row = AmbilBarisDipilih();
+            if (row is null)
             {
                 return;
             }
@@ -228,6 +351,22 @@ namespace AplikasiKasirSMK4
             txtBarcode.Focus();
         }
 
+        private void dgvKeranjang_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0)
+            {
+                return;
+            }
+
+            DataGridViewRow row = dgvKeranjang.Rows[e.RowIndex];
+            if (row.IsNewRow)
+            {
+                return;
+            }
+
+            HapusBarisDipilih();
+        }
+
         // =========================================================
         // 3. TOTAL DAN KEMBALIAN
         // =========================================================
@@ -242,6 +381,8 @@ namespace AplikasiKasirSMK4
                     continue;
                 }
 
+                // Subtotal dijumlahkan apa adanya karena sudah dibulatkan
+                // oleh BulatkanSubtotal saat baris dibuat atau diperbarui.
                 total += InputHelper.AmbilDecimal(row.Cells[4].Value);
             }
 
@@ -252,8 +393,11 @@ namespace AplikasiKasirSMK4
             PerbaruiKembalian();
         }
 
+        private bool _isFormattingBayar;
+
         private void txtBayar_TextChanged(object sender, EventArgs e)
         {
+            InputHelper.FormatRibuanOtomatis(txtBayar, ref _isFormattingBayar);
             PerbaruiKembalian();
         }
 
@@ -312,7 +456,7 @@ namespace AplikasiKasirSMK4
 
             try
             {
-                string noNota = SimpanTransaksi();
+                string noNota = SimpanTransaksi(uangBayar, kembalian);
 
                 MessageBox.Show(
                     "Transaksi Berhasil Disimpan!\n\n"
@@ -348,8 +492,14 @@ namespace AplikasiKasirSMK4
         /// <summary>
         /// Menyimpan transaksi di dalam database transaction.
         /// Semua perubahan dibatalkan (rollback) bila terjadi satu saja kegagalan.
+        ///
+        /// Yang disimpan:
+        ///   tb_transaksi           -> header nota + uang diterima &amp; kembalian
+        ///   tb_detail_transaksi   -> satu baris per item, lengkap dengan snapshot
+        ///                            nama_barang dan harga_satuan saat penjualan
+        ///   tb_mutasi_stok        -> riwayat stok berkurang karena penjualan
         /// </summary>
-        private string SimpanTransaksi()
+        internal string SimpanTransaksi(decimal uangDiterima, decimal kembalian)
         {
             using MySqlConnection conn = _koneksi.GetConn();
             conn.Open();
@@ -363,21 +513,35 @@ namespace AplikasiKasirSMK4
 
                 string noNota = BuatNomorNota();
 
+                // uang_diterima dan kembalian disimpan agar laporan rekonsiliasi
+                // kas bisa dilakukan belakangan (sebelumnya keduanya hilang).
                 const string queryTransaksi =
-                    "INSERT INTO tb_transaksi (no_nota, id_user, total_bayar) "
-                    + "VALUES (@noNota, @idUser, @totalBayar)";
+                    "INSERT INTO tb_transaksi "
+                    + "(no_nota, id_user, total_bayar, uang_diterima, kembalian) "
+                    + "VALUES (@noNota, @idUser, @totalBayar, @uangDiterima, @kembalian)";
 
+                long idTransaksi;
                 using (MySqlCommand cmdTrans = new(queryTransaksi, conn, transaksi))
                 {
                     cmdTrans.Parameters.AddWithValue("@noNota", noNota);
                     cmdTrans.Parameters.AddWithValue("@idUser", idUser);
                     cmdTrans.Parameters.AddWithValue("@totalBayar", _totalBelanja);
+                    cmdTrans.Parameters.AddWithValue("@uangDiterima", uangDiterima);
+                    cmdTrans.Parameters.AddWithValue("@kembalian", kembalian);
                     cmdTrans.ExecuteNonQuery();
+
+                    // Kunci numerik hasil transaksi dipakai untuk mengaitkan detail.
+                    idTransaksi = cmdTrans.LastInsertedId;
                 }
 
+                // nama_barang dan harga_satuan disimpan ulang sebagai snapshot.
+                // Kalau harga atau nama barang diubah tujuh bulan kemudian, nota lama
+                // tetap menampilkan informasi yang benar saat penjualan terjadi.
                 const string queryDetail =
-                    "INSERT INTO tb_detail_transaksi (no_nota, kode_barcode, qty, subtotal) "
-                    + "VALUES (@noNota, @kode, @qty, @subtotal)";
+                    "INSERT INTO tb_detail_transaksi "
+                    + "(id_transaksi, no_nota, kode_barcode, nama_barang, qty, "
+                    + " harga_satuan, subtotal) "
+                    + "VALUES (@idTransaksi, @noNota, @kode, @nama, @qty, @harga, @subtotal)";
 
                 const string queryStok =
                     "UPDATE tb_barang SET stok = stok - @qty WHERE kode_barcode = @kode";
@@ -385,6 +549,13 @@ namespace AplikasiKasirSMK4
                 const string queryCekStok =
                     "SELECT nama_barang, stok FROM tb_barang "
                     + "WHERE kode_barcode = @kode FOR UPDATE";
+
+                // Setiap penjualan dicatat sebagai mutasi stok KELUAR (nilai negatif)
+                // supaya bisa ditelusuri kenapa stok suatu barang berkurang.
+                const string queryMutasi =
+                    "INSERT INTO tb_mutasi_stok "
+                    + "(kode_barcode, tipe, qty, stok_akhir, keterangan, id_user, ref_no_nota) "
+                    + "VALUES (@kode, 'KELUAR', @qty, @stokAkhir, @keterangan, @idUser, @noNota)";
 
                 foreach (DataGridViewRow row in dgvKeranjang.Rows)
                 {
@@ -399,18 +570,19 @@ namespace AplikasiKasirSMK4
                         continue;
                     }
 
-                    int qty = InputHelper.AmbilInt(row.Cells[3].Value);
-                    if (qty <= 0)
+                    decimal qty = InputHelper.AmbilDecimal(row.Cells[3].Value);
+                    if (qty <= 0m)
                     {
                         continue;
                     }
 
-                    decimal subtotal = InputHelper.AmbilDecimal(row.Cells[4].Value);
+                    decimal hargaSatuan = InputHelper.AmbilDecimal(row.Cells[2].Value);
+                    decimal subtotal = BulatkanSubtotal(InputHelper.AmbilDecimal(row.Cells[4].Value));
 
                     // Kunci baris barang dan cek stok terbaru.
                     // FOR UPDATE mencegah dua kasir menjual stok yang sama.
                     string namaBarang;
-                    int stokTerbaru;
+                    decimal stokTerbaru;
 
                     using (MySqlCommand cmdCek = new(queryCekStok, conn, transaksi))
                     {
@@ -423,21 +595,25 @@ namespace AplikasiKasirSMK4
                         }
 
                         namaBarang = reader["nama_barang"]?.ToString() ?? kodeBarang;
-                        stokTerbaru = InputHelper.AmbilInt(reader["stok"]);
+                        stokTerbaru = InputHelper.AmbilDecimal(reader["stok"]);
                     }
 
                     if (stokTerbaru < qty)
                     {
                         throw new StokTidakCukupException(
                             "Stok \"" + namaBarang + "\" tidak cukup!\n"
-                            + "Diminta: " + qty + ", tersedia: " + stokTerbaru + ".");
+                            + "Diminta: " + InputHelper.FormatJumlah(qty)
+                            + ", tersedia: " + InputHelper.FormatJumlah(stokTerbaru) + ".");
                     }
 
                     using (MySqlCommand cmdDetail = new(queryDetail, conn, transaksi))
                     {
+                        cmdDetail.Parameters.AddWithValue("@idTransaksi", idTransaksi);
                         cmdDetail.Parameters.AddWithValue("@noNota", noNota);
                         cmdDetail.Parameters.AddWithValue("@kode", kodeBarang);
+                        cmdDetail.Parameters.AddWithValue("@nama", namaBarang);
                         cmdDetail.Parameters.AddWithValue("@qty", qty);
+                        cmdDetail.Parameters.AddWithValue("@harga", hargaSatuan);
                         cmdDetail.Parameters.AddWithValue("@subtotal", subtotal);
                         cmdDetail.ExecuteNonQuery();
                     }
@@ -447,6 +623,18 @@ namespace AplikasiKasirSMK4
                         cmdStok.Parameters.AddWithValue("@qty", qty);
                         cmdStok.Parameters.AddWithValue("@kode", kodeBarang);
                         cmdStok.ExecuteNonQuery();
+                    }
+
+                    using (MySqlCommand cmdMutasi = new(queryMutasi, conn, transaksi))
+                    {
+                        cmdMutasi.Parameters.AddWithValue("@kode", kodeBarang);
+                        cmdMutasi.Parameters.AddWithValue("@qty", -qty);
+                        cmdMutasi.Parameters.AddWithValue("@stokAkhir", stokTerbaru - qty);
+                        cmdMutasi.Parameters.AddWithValue(
+                            "@keterangan", "Penualan " + noNota);
+                        cmdMutasi.Parameters.AddWithValue("@idUser", idUser);
+                        cmdMutasi.Parameters.AddWithValue("@noNota", noNota);
+                        cmdMutasi.ExecuteNonQuery();
                     }
                 }
 
@@ -493,7 +681,7 @@ namespace AplikasiKasirSMK4
         private void dgvKeranjang_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
         {
             // KolomIndex = -1 terjadi saat event dipanggil untuk row header.
-            if (e.ColumnIndex is not (2 or 4) || e.RowIndex < 0)
+            if (e.ColumnIndex < 0 || e.RowIndex < 0)
             {
                 return;
             }
@@ -504,8 +692,17 @@ namespace AplikasiKasirSMK4
                 return;
             }
 
-            e.Value = InputHelper.FormatNominal(InputHelper.AmbilDecimal(nilai));
-            e.FormattingApplied = true;
+            decimal angka = InputHelper.AmbilDecimal(nilai);
+
+            // Kolom 2 dan 4 adalah uang (harga & subtotal), kolom 3 adalah jumlah.
+            e.Value = e.ColumnIndex switch
+            {
+                2 or 4 => InputHelper.FormatNominal(angka),
+                3 => InputHelper.FormatJumlah(angka),
+                _ => e.Value,
+            };
+
+            e.FormattingApplied = e.ColumnIndex is 2 or 3 or 4;
         }
 
         private void FormKasir_FormClosing(object? sender, FormClosingEventArgs e)
