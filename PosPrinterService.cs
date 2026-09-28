@@ -11,6 +11,7 @@ namespace AplikasiKasirSMK4
         public string Nama { get; set; } = string.Empty;
         public decimal Qty { get; set; }
         public decimal HargaSatuan { get; set; }
+        public decimal DiskonPersen { get; set; }
         public decimal Subtotal { get; set; }
         public bool IsGrosir { get; set; }
     }
@@ -234,16 +235,16 @@ namespace AplikasiKasirSMK4
 
             // Header Toko (Bold): ESC E 1
             w.Write(new byte[] { 0x1B, 0x45, 0x01 });
-            w.Write(Encoding.ASCII.GetBytes(Tengah(namaToko, MaxCols) + "\n"));
+            w.Write(Encoding.ASCII.GetBytes(namaToko.Trim() + "\n"));
             w.Write(new byte[] { 0x1B, 0x45, 0x00 }); // Bold OFF
 
             if (!string.IsNullOrWhiteSpace(alamat))
             {
-                w.Write(Encoding.ASCII.GetBytes(Tengah(alamat, MaxCols) + "\n"));
+                w.Write(Encoding.ASCII.GetBytes(alamat.Trim() + "\n"));
             }
             if (!string.IsNullOrWhiteSpace(telepon))
             {
-                w.Write(Encoding.ASCII.GetBytes(Tengah("Telp: " + telepon, MaxCols) + "\n"));
+                w.Write(Encoding.ASCII.GetBytes(("Telp: " + telepon.Trim()) + "\n"));
             }
 
             // Garis Pembatas
@@ -271,8 +272,12 @@ namespace AplikasiKasirSMK4
                 // Baris 1: Nama Barang
                 w.Write(Encoding.ASCII.GetBytes(item.Nama + "\n"));
 
-                // Baris 2: Qty x Harga   ->   Subtotal
+                // Baris 2: Qty x Harga (Disc X%)   ->   Subtotal
                 string qtyHarga = $"  {InputHelper.FormatJumlah(item.Qty)} x {InputHelper.FormatNominal(item.HargaSatuan)}";
+                if (item.DiskonPersen > 0)
+                {
+                    qtyHarga += $" (Disc {item.DiskonPersen:0.##}%)";
+                }
                 if (item.IsGrosir) qtyHarga += " (Grosir)";
                 string subtotal = InputHelper.FormatNominal(item.Subtotal);
 
@@ -282,9 +287,18 @@ namespace AplikasiKasirSMK4
             w.Write(Encoding.ASCII.GetBytes(new string('-', MaxCols) + "\n"));
 
             // Ringkasan Pembayaran
-            if (data.DiskonTotal > 0)
+            decimal totalDiskonBarang = data.Items.Sum(i => Math.Max(0m, (i.Qty * i.HargaSatuan) - i.Subtotal));
+            decimal totalSemuaDiskon = totalDiskonBarang + data.DiskonMember + data.DiskonTambahan;
+
+            if (totalSemuaDiskon > 0)
             {
-                w.Write(Encoding.ASCII.GetBytes(BarisDuaKolom("Subtotal Kotor", "Rp " + InputHelper.FormatNominal(data.SubtotalKotor)) + "\n"));
+                decimal totalSebelumDiskon = data.SubtotalKotor + totalDiskonBarang;
+                w.Write(Encoding.ASCII.GetBytes(BarisDuaKolom("Subtotal Kotor", "Rp " + InputHelper.FormatNominal(totalSebelumDiskon)) + "\n"));
+
+                if (totalDiskonBarang > 0)
+                {
+                    w.Write(Encoding.ASCII.GetBytes(BarisDuaKolom("Diskon Barang", "-Rp " + InputHelper.FormatNominal(totalDiskonBarang)) + "\n"));
+                }
                 if (data.DiskonMember > 0)
                 {
                     w.Write(Encoding.ASCII.GetBytes(BarisDuaKolom("Diskon Member", "-Rp " + InputHelper.FormatNominal(data.DiskonMember)) + "\n"));
@@ -292,6 +306,10 @@ namespace AplikasiKasirSMK4
                 if (data.DiskonTambahan > 0)
                 {
                     w.Write(Encoding.ASCII.GetBytes(BarisDuaKolom("Diskon Tambahan", "-Rp " + InputHelper.FormatNominal(data.DiskonTambahan)) + "\n"));
+                }
+                if ((totalDiskonBarang > 0 && (data.DiskonMember > 0 || data.DiskonTambahan > 0)) || (data.DiskonMember > 0 && data.DiskonTambahan > 0))
+                {
+                    w.Write(Encoding.ASCII.GetBytes(BarisDuaKolom("Total Diskon", "-Rp " + InputHelper.FormatNominal(totalSemuaDiskon)) + "\n"));
                 }
             }
 
@@ -328,7 +346,7 @@ namespace AplikasiKasirSMK4
             w.Write(new byte[] { 0x1B, 0x61, 0x01 });
             if (!string.IsNullOrWhiteSpace(catatanStruk))
             {
-                w.Write(Encoding.ASCII.GetBytes(catatanStruk + "\n"));
+                w.Write(Encoding.ASCII.GetBytes(catatanStruk.Trim() + "\n"));
             }
             w.Write(Encoding.ASCII.GetBytes("Struk ini adalah bukti pembayaran yang sah\n"));
 

@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS tb_barang
     stok            NUMERIC NOT NULL DEFAULT 0,
     minimal_grosir  NUMERIC NOT NULL DEFAULT 0,
     harga_grosir    NUMERIC NOT NULL DEFAULT 0,
+    diskon_persen   NUMERIC NOT NULL DEFAULT 0,
     is_active       INTEGER NOT NULL DEFAULT 1
                      CHECK (is_active IN (0, 1)),
     dibuat_pada     TEXT    NOT NULL

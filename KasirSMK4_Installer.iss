@@ -1,9 +1,9 @@
 ; =====================================================================
 ; SKRIP INNO SETUP INSTALLER RESMI
-; APLIKASI KASIR POS SMK NEGERI 4 KABUPATEN TANGERANG
+; SISTEM POS SMK NEGERI 4 KABUPATEN TANGERANG
 ; =====================================================================
 
-#define MyAppName "Aplikasi Kasir SMK Negeri 4"
+#define MyAppName "Sistem POS SMK Negeri 4"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "SMK Negeri 4 Kabupaten Tangerang"
 #define MyAppExeName "AplikasiKasirSMK4.exe"
@@ -15,10 +15,10 @@ AppId={{E8F91B2C-94F3-4A1D-A5F1-8B39B2A7C310}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\Kasir SMK Negeri 4
-DefaultGroupName=Kasir SMK Negeri 4
+DefaultDirName={autopf}\Sistem POS SMK Negeri 4
+DefaultGroupName=Sistem POS SMK Negeri 4
 DisableProgramGroupPage=no
-OutputBaseFilename=Setup_KasirSMK4_v1.0.0
+OutputBaseFilename=Setup_SistemPOS_SMK4_v1.0.0
 OutputDir=publish\Installer
 Compression=lzma2/ultra64
 SolidCompression=yes

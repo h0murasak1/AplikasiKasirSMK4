@@ -80,7 +80,7 @@ namespace AplikasiKasirSMK4
             lblBrand.Name = "lblBrand";
             lblBrand.Size = new Size(330, 28);
             lblBrand.TabIndex = 0;
-            lblBrand.Text = "KASIR SMK NEGERI 4 TANGERANG";
+            lblBrand.Text = "SISTEM POS SMK NEGERI 4 TANGERANG";
             // 
             // pnlBrandKanan
             // 
@@ -300,7 +300,7 @@ namespace AplikasiKasirSMK4
             MinimumSize = new Size(1024, 680);
             Name = "FormMenu";
             StartPosition = FormStartPosition.CenterScreen;
-            Text = "Dashboard Utama - SMK Negeri 4";
+            Text = "Dashboard Utama - Sistem POS SMK Negeri 4";
             WindowState = FormWindowState.Maximized;
             panelTop.ResumeLayout(false);
             panelNavBar.ResumeLayout(false);

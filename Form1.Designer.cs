@@ -64,7 +64,7 @@ namespace AplikasiKasirSMK4
             lblTitle.Name = "lblTitle";
             lblTitle.Size = new Size(420, 30);
             lblTitle.TabIndex = 1;
-            lblTitle.Text = "KASIR SMK NEGERI 4";
+            lblTitle.Text = "SISTEM POS SMK NEGERI 4";
             lblTitle.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // lblSubtitle
@@ -183,7 +183,7 @@ namespace AplikasiKasirSMK4
             MaximizeBox = false;
             Name = "Form1";
             StartPosition = FormStartPosition.CenterScreen;
-            Text = "Login — Kasir SMK Negeri 4";
+            Text = "Login — Sistem POS SMK Negeri 4";
             Load += Form1_Load;
             panelHeader.ResumeLayout(false);
             panelHeader.PerformLayout();

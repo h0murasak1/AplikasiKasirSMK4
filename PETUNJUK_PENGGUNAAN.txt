@@ -1,0 +1,40 @@
+================================================================================
+          PANDUAN PENGGUNAAN & AKTIVASI SISTEM POS SMK NEGERI 4
+================================================================================
+
+1. AKTIVASI LISENSI PERANGKAT (SETIAP PC BARU):
+   --------------------------------------------
+   - Sistem POS ini dilindungi lisensi perangkat (Hardware-Locked).
+   - Setiap komputer/laptop memiliki lisensi terpisah yang terkunci pada komponen fisik PC tersebut.
+   - Saat pertama kali aplikasi dibuka di komputer baru, akan muncul layar "Aktivasi Lisensi"
+     yang menampilkan Kode Mesin (Hardware ID), contoh: SMK4-XXXX-XXXX-XXXX-XXXX.
+   - Klik tombol "Salin Kode" lalu kirimkan kode tersebut kepada Developer (Farhan) via WhatsApp.
+   - Masukkan Kunci Aktivasi resmi yang diberikan Developer, klik "Aktivasi Sekarang",
+     dan sistem akan langsung aktif permanen pada komputer tersebut.
+
+2. AKUN LOGIN BAWAAN (DEFAULT):
+   ----------------------------
+   - Username : admin
+   - Password : admin123
+   *(Setelah login, Anda dapat menambahkan kasir atau pengguna baru di menu Master -> User)*
+
+3. INTEGRASI PRINTER POS / STRUK & CASH DRAWER:
+   --------------------------------------------
+   - Tipe Printer yang Didukung: Epson TM-U220D, TM-T82, printer POS thermal / dot matrix standar.
+   - Sambungkan printer ke PC dan pastikan driver printer sudah terinstall di Windows.
+   - Sambungkan kabel RJ-11 Cash Drawer ke port RJ-11 di belakang printer Epson.
+   - Buka menu "Pengaturan Printer" di aplikasi untuk memilih nama printer default.
+   - Lakukan "Tes Cetak Struk" dan "Tes Buka Laci" untuk memastikan integrasi aktif.
+   - Setiap transaksi selesai, laci kasir (cash drawer) akan terbuka otomatis
+     dan struk belanja langsung dicetak.
+
+4. PENCADANGAN (BACKUP) & PEMULIHAN (RESTORE) DATA:
+   -------------------------------------------------
+   - Database disimpan di dalam folder: data\kasir.db
+   - Anda dapat melakukan backup otomatis kapan saja melalui menu "BACKUP" di aplikasi.
+   - Cadangan database akan tersimpan dalam format berkas .db yang dapat dipulihkan
+     kapan saja bila komputer mengalami kendala atau kerusakan.
+
+================================================================================
+          © SMK NEGERI 4 KABUPATEN TANGERANG — DEVELOPER FARHAN (085692302758)
+================================================================================

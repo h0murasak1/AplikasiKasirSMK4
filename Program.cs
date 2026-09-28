@@ -15,6 +15,19 @@ namespace AplikasiKasirSMK4
                 TampilkanErrorFatal(e.ExceptionObject as Exception);
 
             ApplicationConfiguration.Initialize();
+
+            // 1. Pengecekan Lisensi Hardware-ID
+            if (!LicenseManager.PeriksaStatusAktivasi(out string pesanLisensi))
+            {
+                using var formAktivasi = new FormAktivasi(pesanLisensi);
+                if (formAktivasi.ShowDialog() != DialogResult.OK)
+                {
+                    // Pengguna membatalkan aktivasi atau menutup form -> Keluar dari aplikasi
+                    return;
+                }
+            }
+
+            // 2. Buka aplikasi jika lisensi valid
             Application.Run(new Form1());
         }
 

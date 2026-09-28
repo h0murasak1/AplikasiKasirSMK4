@@ -7,8 +7,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
-    <AssemblyTitle>Aplikasi Kasir SMK Negeri 4</AssemblyTitle>
-    <Product>Kasir SMK4</Product>
+    <AssemblyTitle>Sistem POS SMK Negeri 4</AssemblyTitle>
+    <Product>Sistem POS SMK4</Product>
     <Copyright>© 2024 SMK Negeri 4 Kabupaten Tangerang</Copyright>
     <Version>1.0.0</Version>
   </PropertyGroup>
@@ -16,6 +16,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <PackageReference Include="ReaLTaiizor" Version="3.8.2.1" />
+    <PackageReference Include="System.Management" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup>

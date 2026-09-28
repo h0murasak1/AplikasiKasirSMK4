@@ -38,6 +38,8 @@ namespace AplikasiKasirSMK4
             this.txtMinGrosir = new ReaLTaiizor.Controls.HopeTextBox();
             this.lblHargaGrosir = new System.Windows.Forms.Label();
             this.txtHargaGrosir = new ReaLTaiizor.Controls.HopeTextBox();
+            this.lblDiskon = new System.Windows.Forms.Label();
+            this.txtDiskon = new ReaLTaiizor.Controls.HopeTextBox();
             this.lblStok = new System.Windows.Forms.Label();
             this.txtStok = new ReaLTaiizor.Controls.HopeTextBox();
             this.lblSatuan = new System.Windows.Forms.Label();
@@ -89,10 +91,12 @@ namespace AplikasiKasirSMK4
             this.panelKiri.Controls.Add(this.txtMinGrosir);
             this.panelKiri.Controls.Add(this.lblHargaGrosir);
             this.panelKiri.Controls.Add(this.txtHargaGrosir);
-            this.panelKiri.Controls.Add(this.lblStok);
-            this.panelKiri.Controls.Add(this.txtStok);
+            this.panelKiri.Controls.Add(this.lblDiskon);
+            this.panelKiri.Controls.Add(this.txtDiskon);
             this.panelKiri.Controls.Add(this.lblSatuan);
             this.panelKiri.Controls.Add(this.cmbSatuan);
+            this.panelKiri.Controls.Add(this.lblStok);
+            this.panelKiri.Controls.Add(this.txtStok);
             this.panelKiri.Controls.Add(this.btnSimpan);
             this.panelKiri.Controls.Add(this.btnEdit);
             this.panelKiri.Controls.Add(this.btnHapus);
@@ -213,19 +217,19 @@ namespace AplikasiKasirSMK4
             this.txtHargaGrosir.Width = 160;
             this.txtHargaGrosir.Height = 36;
 
-            // Stok & Satuan
-            this.lblStok.AutoSize = true;
-            this.lblStok.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
-            this.lblStok.Location = new System.Drawing.Point(16, 366);
-            this.lblStok.Text = "Jumlah Stok *";
-            this.txtStok.BackColor = System.Drawing.Color.White;
-            this.txtStok.BaseColor = System.Drawing.Color.White;
-            this.txtStok.BorderColorA = System.Drawing.Color.FromArgb(41, 128, 185);
-            this.txtStok.BorderColorB = System.Drawing.Color.Silver;
-            this.txtStok.Font = new System.Drawing.Font("Segoe UI", 10.5F);
-            this.txtStok.Location = new System.Drawing.Point(16, 386);
-            this.txtStok.Width = 160;
-            this.txtStok.Height = 36;
+            // Diskon (%) & Satuan
+            this.lblDiskon.AutoSize = true;
+            this.lblDiskon.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this.lblDiskon.Location = new System.Drawing.Point(16, 366);
+            this.lblDiskon.Text = "Diskon Barang (%)";
+            this.txtDiskon.BackColor = System.Drawing.Color.White;
+            this.txtDiskon.BaseColor = System.Drawing.Color.White;
+            this.txtDiskon.BorderColorA = System.Drawing.Color.FromArgb(41, 128, 185);
+            this.txtDiskon.BorderColorB = System.Drawing.Color.Silver;
+            this.txtDiskon.Font = new System.Drawing.Font("Segoe UI", 10.5F);
+            this.txtDiskon.Location = new System.Drawing.Point(16, 386);
+            this.txtDiskon.Width = 160;
+            this.txtDiskon.Height = 36;
 
             this.lblSatuan.AutoSize = true;
             this.lblSatuan.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
@@ -239,29 +243,43 @@ namespace AplikasiKasirSMK4
                 "pcs", "kg", "gram", "liter", "box", "lusin", "pack", "botol", "bungkus", "porsi", "lembar"
             });
 
+            // Stok
+            this.lblStok.AutoSize = true;
+            this.lblStok.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this.lblStok.Location = new System.Drawing.Point(16, 428);
+            this.lblStok.Text = "Jumlah Stok *";
+            this.txtStok.BackColor = System.Drawing.Color.White;
+            this.txtStok.BaseColor = System.Drawing.Color.White;
+            this.txtStok.BorderColorA = System.Drawing.Color.FromArgb(41, 128, 185);
+            this.txtStok.BorderColorB = System.Drawing.Color.Silver;
+            this.txtStok.Font = new System.Drawing.Font("Segoe UI", 10.5F);
+            this.txtStok.Location = new System.Drawing.Point(16, 448);
+            this.txtStok.Width = 330;
+            this.txtStok.Height = 36;
+
             // Tombol-Tombol
-            this.btnSimpan.Location = new System.Drawing.Point(16, 436);
+            this.btnSimpan.Location = new System.Drawing.Point(16, 498);
             this.btnSimpan.Width = 160;
             this.btnSimpan.Height = 38;
             this.btnSimpan.Text = "SIMPAN";
             this.btnSimpan.PrimaryColor = System.Drawing.Color.FromArgb(39, 174, 96);
             this.btnSimpan.Click += new System.EventHandler(this.btnSimpan_Click);
 
-            this.btnEdit.Location = new System.Drawing.Point(186, 436);
+            this.btnEdit.Location = new System.Drawing.Point(186, 498);
             this.btnEdit.Width = 160;
             this.btnEdit.Height = 38;
             this.btnEdit.Text = "PERBARUI";
             this.btnEdit.PrimaryColor = System.Drawing.Color.FromArgb(243, 156, 18);
             this.btnEdit.Click += new System.EventHandler(this.btnEdit_Click);
 
-            this.btnHapus.Location = new System.Drawing.Point(16, 480);
+            this.btnHapus.Location = new System.Drawing.Point(16, 542);
             this.btnHapus.Width = 160;
             this.btnHapus.Height = 38;
             this.btnHapus.Text = "HAPUS";
             this.btnHapus.PrimaryColor = System.Drawing.Color.FromArgb(231, 76, 60);
             this.btnHapus.Click += new System.EventHandler(this.btnHapus_Click);
 
-            this.btnBersihkan.Location = new System.Drawing.Point(186, 480);
+            this.btnBersihkan.Location = new System.Drawing.Point(186, 542);
             this.btnBersihkan.Width = 160;
             this.btnBersihkan.Height = 38;
             this.btnBersihkan.Text = "BERSIHKAN";
@@ -329,6 +347,8 @@ namespace AplikasiKasirSMK4
         private ReaLTaiizor.Controls.HopeTextBox txtMinGrosir;
         private System.Windows.Forms.Label lblHargaGrosir;
         private ReaLTaiizor.Controls.HopeTextBox txtHargaGrosir;
+        private System.Windows.Forms.Label lblDiskon;
+        private ReaLTaiizor.Controls.HopeTextBox txtDiskon;
         private System.Windows.Forms.Label lblStok;
         private ReaLTaiizor.Controls.HopeTextBox txtStok;
         private System.Windows.Forms.Label lblSatuan;

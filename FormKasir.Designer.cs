@@ -1,4 +1,4 @@
-﻿namespace AplikasiKasirSMK4
+namespace AplikasiKasirSMK4
 {
     partial class FormKasir
     {
@@ -32,6 +32,7 @@
             Kode = new DataGridViewTextBoxColumn();
             Nama = new DataGridViewTextBoxColumn();
             Harga = new DataGridViewTextBoxColumn();
+            Diskon = new DataGridViewTextBoxColumn();
             Qty = new DataGridViewTextBoxColumn();
             Subtotal = new DataGridViewTextBoxColumn();
             txtBarcode = new ReaLTaiizor.Controls.HopeTextBox();
@@ -60,7 +61,7 @@
             lblJudul.Name = "lblJudul";
             lblJudul.Size = new Size(457, 41);
             lblJudul.TabIndex = 0;
-            lblJudul.Text = "APLIKASI KASIR SMK NEGERI 4";
+            lblJudul.Text = "SISTEM POS SMK NEGERI 4";
             // 
             // panelKanan
             // 
@@ -197,7 +198,7 @@
             dgvKeranjang.BackgroundColor = Color.White;
             dgvKeranjang.BorderStyle = BorderStyle.None;
             dgvKeranjang.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dgvKeranjang.Columns.AddRange(new DataGridViewColumn[] { Kode, Nama, Harga, Qty, Subtotal });
+            dgvKeranjang.Columns.AddRange(new DataGridViewColumn[] { Kode, Nama, Harga, Diskon, Qty, Subtotal });
             dgvKeranjang.Dock = DockStyle.Fill;
             dgvKeranjang.Font = new Font("Segoe UI", 12F);
             dgvKeranjang.Location = new Point(20, 68);
@@ -228,6 +229,13 @@
             Harga.MinimumWidth = 6;
             Harga.Name = "Harga";
             Harga.ReadOnly = true;
+            // 
+            // Diskon
+            // 
+            Diskon.HeaderText = "Diskon";
+            Diskon.MinimumWidth = 6;
+            Diskon.Name = "Diskon";
+            Diskon.ReadOnly = true;
             // 
             // Qty
             // 
@@ -275,7 +283,7 @@
             Controls.Add(panelKanan);
             Controls.Add(panelHeader);
             Name = "FormKasir";
-            Text = "Kasir - SMK Negeri 4";
+            Text = "Sistem POS - SMK Negeri 4";
             WindowState = FormWindowState.Maximized;
             panelHeader.ResumeLayout(false);
             panelHeader.PerformLayout();
@@ -304,6 +312,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn Kode;
         private System.Windows.Forms.DataGridViewTextBoxColumn Nama;
         private System.Windows.Forms.DataGridViewTextBoxColumn Harga;
+        private System.Windows.Forms.DataGridViewTextBoxColumn Diskon;
         private System.Windows.Forms.DataGridViewTextBoxColumn Qty;
         private System.Windows.Forms.DataGridViewTextBoxColumn Subtotal;
     }

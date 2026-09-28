@@ -31,6 +31,13 @@ namespace AplikasiKasirSMK4
             dgvBarang.CellFormatting += dgvBarang_CellFormatting;
             txtStok.KeyPress += txtStok_KeyPress;
             txtMinGrosir.KeyPress += txtStok_KeyPress;
+            txtDiskon.KeyPress += (s, e) =>
+            {
+                if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar) && e.KeyChar != '.' && e.KeyChar != ',')
+                {
+                    e.Handled = true;
+                }
+            };
         }
 
         private void txtStok_KeyPress(object? sender, KeyPressEventArgs e)
@@ -117,8 +124,8 @@ namespace AplikasiKasirSMK4
                     "SELECT b.kode_barcode AS 'Kode', b.nama_barang AS 'Nama Barang', "
                     + "j.nama_jenis AS 'Jenis', m.nama_merek AS 'Merek', s.nama_supplier AS 'Supplier', "
                     + "b.satuan AS 'Satuan', b.harga_beli AS 'Harga Beli', "
-                    + "b.harga_jual AS 'Harga Jual', b.minimal_grosir AS 'Min. Grosir', "
-                    + "b.harga_grosir AS 'Harga Grosir', b.stok AS 'Stok', "
+                    + "b.harga_jual AS 'Harga Jual', b.diskon_persen AS 'Diskon (%)', "
+                    + "b.minimal_grosir AS 'Min. Grosir', b.harga_grosir AS 'Harga Grosir', b.stok AS 'Stok', "
                     + "b.id_jenis, b.id_merek, b.id_supplier "
                     + "FROM tb_barang b "
                     + "LEFT JOIN tb_jenis_barang j ON j.id_jenis = b.id_jenis "
@@ -156,6 +163,7 @@ namespace AplikasiKasirSMK4
             txtHargaJual.Text = string.Empty;
             txtMinGrosir.Text = string.Empty;
             txtHargaGrosir.Text = string.Empty;
+            txtDiskon.Text = string.Empty;
             txtStok.Text = string.Empty;
             if (cmbJenis.Items.Count > 0) cmbJenis.SelectedIndex = 0;
             if (cmbMerek.Items.Count > 0) cmbMerek.SelectedIndex = 0;
@@ -166,7 +174,7 @@ namespace AplikasiKasirSMK4
 
         private bool AmbilInput(out string kode, out string nama, out string satuan,
             out decimal hargaBeli, out decimal hargaJual, out decimal minGrosir, out decimal hargaGrosir,
-            out decimal stok, out int? idJenis, out int? idMerek, out int? idSupplier)
+            out decimal diskonPersen, out decimal stok, out int? idJenis, out int? idMerek, out int? idSupplier)
         {
             kode = txtKode.Text.Trim();
             nama = txtNama.Text.Trim();
@@ -177,6 +185,7 @@ namespace AplikasiKasirSMK4
             hargaJual = 0m;
             minGrosir = 0m;
             hargaGrosir = 0m;
+            diskonPersen = 0m;
             stok = 0m;
 
             idJenis = (cmbJenis.SelectedItem as MasterComboItem)?.Id;
@@ -231,6 +240,20 @@ namespace AplikasiKasirSMK4
                 hargaGrosir = hg;
             }
 
+            // Diskon barang opsional (0 - 100%)
+            if (txtDiskon.Text.Trim().Length > 0)
+            {
+                if (!InputHelper.TryParseNominal(txtDiskon.Text, out decimal dp, out string pesanDiskon)
+                    || dp < 0 || dp > 100)
+                {
+                    MessageBox.Show("Diskon barang harus berupa angka antara 0 sampai 100%!\n" + pesanDiskon,
+                        "Peringatan", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    txtDiskon.Focus();
+                    return false;
+                }
+                diskonPersen = Math.Round(dp, 2);
+            }
+
             if (!InputHelper.TryParseBilanBulat(txtStok.Text, out int stokBulat, out string pesanStok))
             {
                 MessageBox.Show("Jumlah stok tidak valid: " + pesanStok + ".", "Peringatan",
@@ -266,7 +289,7 @@ namespace AplikasiKasirSMK4
         {
             if (!AmbilInput(out string kode, out string nama, out string satuan,
                     out decimal hargaBeli, out decimal hargaJual, out decimal minGrosir, out decimal hargaGrosir,
-                    out decimal stok, out int? idJenis, out int? idMerek, out int? idSupplier))
+                    out decimal diskonPersen, out decimal stok, out int? idJenis, out int? idMerek, out int? idSupplier))
             {
                 return;
             }
@@ -292,7 +315,7 @@ namespace AplikasiKasirSMK4
                         return;
                     }
 
-                    AktifkanKembali(conn, kode, nama, satuan, hargaBeli, hargaJual, minGrosir, hargaGrosir, stok, idJenis, idMerek, idSupplier);
+                    AktifkanKembali(conn, kode, nama, satuan, hargaBeli, hargaJual, minGrosir, hargaGrosir, diskonPersen, stok, idJenis, idMerek, idSupplier);
                     TampilkanSukses("Barang \"" + nama + "\" berhasil diaktifkan kembali!");
                     BersihkanForm();
                     TampilData();
@@ -314,8 +337,8 @@ namespace AplikasiKasirSMK4
 
                 const string query =
                     "INSERT INTO tb_barang "
-                    + "(kode_barcode, nama_barang, satuan, harga_beli, harga_jual, minimal_grosir, harga_grosir, stok, id_jenis, id_merek, id_supplier, is_active) "
-                    + "VALUES (@kode, @nama, @satuan, @hargaBeli, @hargaJual, @minGrosir, @hargaGrosir, @stok, @jenis, @merek, @supplier, 1)";
+                    + "(kode_barcode, nama_barang, satuan, harga_beli, harga_jual, minimal_grosir, harga_grosir, diskon_persen, stok, id_jenis, id_merek, id_supplier, is_active) "
+                    + "VALUES (@kode, @nama, @satuan, @hargaBeli, @hargaJual, @minGrosir, @hargaGrosir, @diskonPersen, @stok, @jenis, @merek, @supplier, 1)";
 
                 using (SqliteCommand cmd = new(query, conn))
                 {
@@ -326,6 +349,7 @@ namespace AplikasiKasirSMK4
                     cmd.Parameters.AddWithValue("@hargaJual", hargaJual);
                     cmd.Parameters.AddWithValue("@minGrosir", minGrosir);
                     cmd.Parameters.AddWithValue("@hargaGrosir", hargaGrosir);
+                    cmd.Parameters.AddWithValue("@diskonPersen", diskonPersen);
                     cmd.Parameters.AddWithValue("@stok", stok);
                     cmd.Parameters.AddWithValue("@jenis", idJenis.HasValue ? idJenis.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@merek", idMerek.HasValue ? idMerek.Value : DBNull.Value);
@@ -378,7 +402,7 @@ namespace AplikasiKasirSMK4
 
         private static void AktifkanKembali(
             SqliteConnection conn, string kode, string nama, string satuan,
-            decimal hargaBeli, decimal hargaJual, decimal minGrosir, decimal hargaGrosir, decimal stok,
+            decimal hargaBeli, decimal hargaJual, decimal minGrosir, decimal hargaGrosir, decimal diskonPersen, decimal stok,
             int? idJenis, int? idMerek, int? idSupplier)
         {
             decimal stokLama = BacaStok(conn, kode);
@@ -386,7 +410,7 @@ namespace AplikasiKasirSMK4
             const string query =
                 "UPDATE tb_barang SET nama_barang = @nama, satuan = @satuan, "
                 + "harga_beli = @hargaBeli, harga_jual = @hargaJual, "
-                + "minimal_grosir = @minGrosir, harga_grosir = @hargaGrosir, "
+                + "minimal_grosir = @minGrosir, harga_grosir = @hargaGrosir, diskon_persen = @diskonPersen, "
                 + "id_jenis = @jenis, id_merek = @merek, id_supplier = @supplier, "
                 + "stok = @stok, is_active = 1 WHERE kode_barcode = @kode";
 
@@ -397,6 +421,7 @@ namespace AplikasiKasirSMK4
             cmd.Parameters.AddWithValue("@hargaJual", hargaJual);
             cmd.Parameters.AddWithValue("@minGrosir", minGrosir);
             cmd.Parameters.AddWithValue("@hargaGrosir", hargaGrosir);
+            cmd.Parameters.AddWithValue("@diskonPersen", diskonPersen);
             cmd.Parameters.AddWithValue("@jenis", idJenis.HasValue ? idJenis.Value : DBNull.Value);
             cmd.Parameters.AddWithValue("@merek", idMerek.HasValue ? idMerek.Value : DBNull.Value);
             cmd.Parameters.AddWithValue("@supplier", idSupplier.HasValue ? idSupplier.Value : DBNull.Value);
@@ -450,6 +475,16 @@ namespace AplikasiKasirSMK4
             txtMinGrosir.Text = FormatNilaiRibuan(data["Min. Grosir"]);
             txtHargaGrosir.Text = FormatNilaiRibuan(data["Harga Grosir"]);
             txtStok.Text = FormatNilaiRibuan(data["Stok"]);
+
+            if (data.Row.Table.Columns.Contains("Diskon (%)"))
+            {
+                decimal dp = InputHelper.AmbilDecimal(data["Diskon (%)"]);
+                txtDiskon.Text = dp > 0 ? dp.ToString("0.##") : string.Empty;
+            }
+            else
+            {
+                txtDiskon.Text = string.Empty;
+            }
 
             // Set dropdown Jenis, Merek, Supplier
             int? idJ = data.Row.Table.Columns.Contains("id_jenis") ? InputHelper.AmbilInt(data["id_jenis"]) : (int?)null;
@@ -507,7 +542,7 @@ namespace AplikasiKasirSMK4
 
             if (!AmbilInput(out string kode, out string nama, out string satuan,
                     out decimal hargaBeli, out decimal hargaJual, out decimal minGrosir, out decimal hargaGrosir,
-                    out decimal stok, out int? idJenis, out int? idMerek, out int? idSupplier))
+                    out decimal diskonPersen, out decimal stok, out int? idJenis, out int? idMerek, out int? idSupplier))
             {
                 return;
             }
@@ -533,7 +568,7 @@ namespace AplikasiKasirSMK4
                 const string query =
                     "UPDATE tb_barang SET nama_barang = @nama, satuan = @satuan, "
                     + "harga_beli = @hargaBeli, harga_jual = @hargaJual, "
-                    + "minimal_grosir = @minGrosir, harga_grosir = @hargaGrosir, "
+                    + "minimal_grosir = @minGrosir, harga_grosir = @hargaGrosir, diskon_persen = @diskonPersen, "
                     + "id_jenis = @jenis, id_merek = @merek, id_supplier = @supplier, "
                     + "stok = @stok WHERE kode_barcode = @kode";
 
@@ -545,6 +580,7 @@ namespace AplikasiKasirSMK4
                     cmd.Parameters.AddWithValue("@hargaJual", hargaJual);
                     cmd.Parameters.AddWithValue("@minGrosir", minGrosir);
                     cmd.Parameters.AddWithValue("@hargaGrosir", hargaGrosir);
+                    cmd.Parameters.AddWithValue("@diskonPersen", diskonPersen);
                     cmd.Parameters.AddWithValue("@jenis", idJenis.HasValue ? idJenis.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@merek", idMerek.HasValue ? idMerek.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@supplier", idSupplier.HasValue ? idSupplier.Value : DBNull.Value);
@@ -640,6 +676,12 @@ namespace AplikasiKasirSMK4
             {
                 decimal angka = InputHelper.AmbilDecimal(e.Value);
                 e.Value = angka > 0 ? "Rp " + InputHelper.FormatNominal(angka) : "-";
+                e.FormattingApplied = true;
+            }
+            else if (namaKolom is "Diskon (%)")
+            {
+                decimal angka = InputHelper.AmbilDecimal(e.Value);
+                e.Value = angka > 0 ? angka.ToString("0.##") + "%" : "-";
                 e.FormattingApplied = true;
             }
             else if (namaKolom is "Stok" or "Min. Grosir")

@@ -97,7 +97,7 @@ namespace AplikasiKasirSMK4
             lblJudul.AutoSize = true;
             lblJudul.Font = new Font("Segoe UI", 15F, FontStyle.Bold);
             lblJudul.ForeColor = Color.White;
-            lblJudul.Text = "KASIR SMK NEGERI 4";
+            lblJudul.Text = "SISTEM POS SMK NEGERI 4";
             panelHeader.Controls.Add(lblJudul);
 
             // Panel sisi kanan header
@@ -305,6 +305,56 @@ namespace AplikasiKasirSMK4
             panelKanan.Controls.Add(txtBayar);
             y += 56;
 
+            // Tombol pecahan uang bayar (5.000 s/d 200.000)
+            var flowPecahan = new FlowLayoutPanel
+            {
+                Location = new Point(x, y),
+                Size = new Size(lebar, 64),
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                AutoSize = false,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+
+            var pecahan = new (string Label, decimal Nilai)[]
+            {
+                ("5.000", 5_000m),
+                ("10.000", 10_000m),
+                ("20.000", 20_000m),
+                ("50.000", 50_000m),
+                ("100.000", 100_000m),
+                ("200.000", 200_000m),
+            };
+
+            int btnW = (lebar - 8) / 3;
+            int btnH = 28;
+            foreach (var (label, nilai) in pecahan)
+            {
+                var btn = new Button
+                {
+                    Text = label,
+                    Width = btnW,
+                    Height = btnH,
+                    Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+                    Margin = new Padding(1),
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.FromArgb(41, 128, 185),
+                    ForeColor = Color.White,
+                    Cursor = Cursors.Hand,
+                };
+                btn.FlatAppearance.BorderSize = 0;
+                decimal nilaiTombol = nilai;
+                btn.Click += (_, _) =>
+                {
+                    txtBayar.Text = InputHelper.FormatNominal(nilaiTombol);
+                };
+                flowPecahan.Controls.Add(btn);
+            }
+
+            panelKanan.Controls.Add(flowPecahan);
+            y += 70;
+
             // Kembalian
             lblKembalianTitle.Location = new Point(x, y);
             lblKembalianTitle.Size = new Size(lebar, 20);
@@ -330,7 +380,7 @@ namespace AplikasiKasirSMK4
         {
             // 1. Muat Member
             cmbMember.Items.Clear();
-            cmbMember.Items.Add(new ItemPilihan(null, "â€” Tanpa Member (Umum) â€”", 0m));
+            cmbMember.Items.Add(new ItemPilihan(null, "-- Tanpa Member (Umum) --", 0m));
 
             try
             {
@@ -354,7 +404,7 @@ namespace AplikasiKasirSMK4
 
                 // 2. Muat Sales
                 cmbSales.Items.Clear();
-                cmbSales.Items.Add(new ItemPilihan(null, "â€” Tanpa Sales â€”", 0m));
+                cmbSales.Items.Add(new ItemPilihan(null, "-- Tanpa Sales --", 0m));
                 using (SqliteCommand cmd = new(
                     "SELECT id_sales, kode_sales, nama_sales, komisi_persen FROM tb_sales "
                     + "WHERE is_active = 1 ORDER BY nama_sales", conn))
@@ -371,7 +421,7 @@ namespace AplikasiKasirSMK4
                     }
                 }
 
-                // 3. Muat Metode Bayar (dengan self-healing default insert jika kosong)
+                // 3. Muat Metode Bayar (Non-tunai diberi label Under Development)
                 cmbMetodeBayar.Items.Clear();
                 using (SqliteCommand cmd = new(
                     "SELECT id_metode, nama_metode, jenis FROM tb_metode_bayar "
@@ -383,7 +433,8 @@ namespace AplikasiKasirSMK4
                         int id = InputHelper.AmbilInt(r["id_metode"]);
                         string nama = r["nama_metode"]?.ToString() ?? "";
                         string jenis = r["jenis"]?.ToString() ?? "TUNAI";
-                        cmbMetodeBayar.Items.Add(new ItemPilihan(id, nama, 0m, jenis));
+                        string teks = jenis == "TUNAI" ? nama : $"{nama} (Under Development)";
+                        cmbMetodeBayar.Items.Add(new ItemPilihan(id, teks, 0m, jenis));
                     }
                 }
 
@@ -411,7 +462,8 @@ namespace AplikasiKasirSMK4
                             int id = InputHelper.AmbilInt(r["id_metode"]);
                             string nama = r["nama_metode"]?.ToString() ?? "";
                             string jenis = r["jenis"]?.ToString() ?? "TUNAI";
-                            cmbMetodeBayar.Items.Add(new ItemPilihan(id, nama, 0m, jenis));
+                            string teks = jenis == "TUNAI" ? nama : $"{nama} (Under Development)";
+                            cmbMetodeBayar.Items.Add(new ItemPilihan(id, teks, 0m, jenis));
                         }
                     }
                 }
@@ -443,22 +495,19 @@ namespace AplikasiKasirSMK4
         {
             if (cmbMetodeBayar.SelectedItem is not ItemPilihan item) return;
 
-            if (item.Jenis == "NON_TUNAI")
+            if (item.Jenis != "TUNAI")
             {
-                txtBayar.Text = InputHelper.FormatNominal(_totalBelanja);
-                txtBayar.Enabled = false;
-            }
-            else if (item.Jenis == "TEMPO")
-            {
-                txtBayar.Text = "0";
-                txtBayar.Enabled = false;
-            }
-            else
-            {
-                txtBayar.Enabled = true;
-                txtBayar.Clear();
+                MessageBox.Show(
+                    $"Metode pembayaran \"{item.Teks}\" saat ini masih dalam tahap pengembangan (Under Development) dan belum dapat digunakan.\nSilakan gunakan metode Tunai.",
+                    "Under Development",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+
+                cmbMetodeBayar.SelectedIndex = 0;
+                return;
             }
 
+            txtBayar.Enabled = true;
             PerbaruiKembalian();
         }
 
@@ -484,6 +533,7 @@ namespace AplikasiKasirSMK4
             decimal minGrosir;
             decimal hargaGrosir;
             decimal stokTersedia;
+            decimal diskonPersen;
 
             try
             {
@@ -492,7 +542,8 @@ namespace AplikasiKasirSMK4
                 const string query =
                     "SELECT nama_barang, harga_jual, stok, "
                     + "COALESCE(minimal_grosir, 0) AS minimal_grosir, "
-                    + "COALESCE(harga_grosir, 0) AS harga_grosir "
+                    + "COALESCE(harga_grosir, 0) AS harga_grosir, "
+                    + "COALESCE(diskon_persen, 0) AS diskon_persen "
                     + "FROM tb_barang WHERE kode_barcode = @kode AND is_active = 1 LIMIT 1";
 
                 using SqliteCommand cmd = new(query, conn);
@@ -510,6 +561,7 @@ namespace AplikasiKasirSMK4
                 stokTersedia = InputHelper.AmbilDecimal(reader["stok"]);
                 minGrosir = InputHelper.AmbilDecimal(reader["minimal_grosir"]);
                 hargaGrosir = InputHelper.AmbilDecimal(reader["harga_grosir"]);
+                diskonPersen = InputHelper.AmbilDecimal(reader["diskon_persen"]);
             }
             catch (Exception ex)
             {
@@ -546,13 +598,19 @@ namespace AplikasiKasirSMK4
                 ? hargaGrosir
                 : hargaEcer;
 
+            // Harga setelah diskon per barang
+            decimal hargaSetelahDiskon = diskonPersen > 0m
+                ? BulatkanSubtotal(hargaEfektif * (1m - diskonPersen / 100m))
+                : hargaEfektif;
+
             if (qtyDiKeranjang > 0m)
             {
                 PerbaruiBarisKeranjang(kode, qtyBaru, hargaEfektif);
             }
             else
             {
-                dgvKeranjang.Rows.Add(kode, nama, hargaEfektif, 1m, hargaEfektif);
+                // Kode, Nama, Harga, Diskon(%), Qty, Subtotal
+                dgvKeranjang.Rows.Add(kode, nama, hargaEfektif, diskonPersen, 1m, hargaSetelahDiskon);
             }
 
             HitungTotalBelanja();
@@ -580,7 +638,7 @@ namespace AplikasiKasirSMK4
                 if (string.Equals(row.Cells[0].Value?.ToString(), kode,
                         StringComparison.OrdinalIgnoreCase))
                 {
-                    return InputHelper.AmbilDecimal(row.Cells[3].Value);
+                    return InputHelper.AmbilDecimal(row.Cells[4].Value);
                 }
             }
 
@@ -600,9 +658,11 @@ namespace AplikasiKasirSMK4
                 }
 
                 decimal harga = hargaBaru ?? InputHelper.AmbilDecimal(row.Cells[2].Value);
+                decimal diskon = InputHelper.AmbilDecimal(row.Cells[3].Value);
+                decimal hargaSetelahDiskon = diskon > 0m ? BulatkanSubtotal(harga * (1m - diskon / 100m)) : harga;
                 row.Cells[2].Value = harga;
-                row.Cells[3].Value = qtyBaru;
-                row.Cells[4].Value = BulatkanSubtotal(harga * qtyBaru);
+                row.Cells[4].Value = qtyBaru;
+                row.Cells[5].Value = BulatkanSubtotal(hargaSetelahDiskon * qtyBaru);
                 dgvKeranjang.Refresh();
                 return;
             }
@@ -655,7 +715,7 @@ namespace AplikasiKasirSMK4
 
             string kode = row.Cells[0].Value?.ToString() ?? string.Empty;
             string nama = row.Cells[1].Value?.ToString() ?? "(tanpa nama)";
-            decimal qtyLama = InputHelper.AmbilDecimal(row.Cells[3].Value);
+            decimal qtyLama = InputHelper.AmbilDecimal(row.Cells[4].Value);
 
             decimal stokTersedia;
             decimal hargaEcer;
@@ -769,7 +829,7 @@ namespace AplikasiKasirSMK4
             foreach (DataGridViewRow row in dgvKeranjang.Rows)
             {
                 if (row.IsNewRow) continue;
-                totalKotor += InputHelper.AmbilDecimal(row.Cells[4].Value);
+                totalKotor += InputHelper.AmbilDecimal(row.Cells[5].Value);
             }
 
             _totalBelanjaKotor = totalKotor;
@@ -862,10 +922,10 @@ namespace AplikasiKasirSMK4
             ItemPilihan? member = cmbMember.SelectedItem as ItemPilihan;
             ItemPilihan? sales = cmbSales.SelectedItem as ItemPilihan;
 
-            if (jenisMetode == "TEMPO" && (!member?.Id.HasValue ?? true))
+            if (jenisMetode != "TUNAI")
             {
-                TampilkanPeringatan("Metode bayar TEMPO (Piutang) hanya dapat digunakan jika Member dipilih!");
-                cmbMember.Focus();
+                TampilkanPeringatan("Metode pembayaran selain Tunai saat ini masih dalam tahap pengembangan (Under Development).\nSilakan gunakan metode Tunai.");
+                cmbMetodeBayar.SelectedIndex = 0;
                 return;
             }
 
@@ -953,8 +1013,9 @@ namespace AplikasiKasirSMK4
                         Kode = r.Cells[0].Value?.ToString() ?? "",
                         Nama = r.Cells[1].Value?.ToString() ?? "",
                         HargaSatuan = InputHelper.AmbilDecimal(r.Cells[2].Value),
-                        Qty = InputHelper.AmbilDecimal(r.Cells[3].Value),
-                        Subtotal = InputHelper.AmbilDecimal(r.Cells[4].Value),
+                        DiskonPersen = InputHelper.AmbilDecimal(r.Cells[3].Value),
+                        Qty = InputHelper.AmbilDecimal(r.Cells[4].Value),
+                        Subtotal = InputHelper.AmbilDecimal(r.Cells[5].Value),
                     });
                 }
 
@@ -962,11 +1023,11 @@ namespace AplikasiKasirSMK4
                 bool printBerhasil = PosPrinterService.CetakStrukDanBukaDrawer(struk, null, out string printerErr);
                 if (printBerhasil)
                 {
-                    infoSukses += "\nðŸ–¨ï¸ Struk dicetak & âš¡ Cash Drawer terbuka otomatis.";
+                    infoSukses += "\n[OK] Struk dicetak & Cash Drawer terbuka otomatis.";
                 }
                 else if (!string.IsNullOrWhiteSpace(printerErr))
                 {
-                    infoSukses += $"\nâš ï¸ Catatan Printer: {printerErr}";
+                    infoSukses += $"\nCatatan Printer: {printerErr}";
                 }
 
                 MessageBox.Show(infoSukses, "Sukses", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1029,8 +1090,8 @@ namespace AplikasiKasirSMK4
                 const string queryDetail =
                     "INSERT INTO tb_detail_transaksi "
                     + "(id_transaksi, no_nota, kode_barcode, nama_barang, qty, "
-                    + " harga_satuan, subtotal, harga_beli_satuan, tipe_harga) "
-                    + "VALUES (@idTransaksi, @noNota, @kode, @nama, @qty, @harga, @subtotal, @hargaBeli, @tipeHarga)";
+                    + " harga_satuan, subtotal, harga_beli_satuan, tipe_harga, diskon_item) "
+                    + "VALUES (@idTransaksi, @noNota, @kode, @nama, @qty, @harga, @subtotal, @hargaBeli, @tipeHarga, @diskonItem)";
 
                 const string queryStok =
                     "UPDATE tb_barang SET stok = stok - @qty WHERE kode_barcode = @kode";
@@ -1053,11 +1114,12 @@ namespace AplikasiKasirSMK4
                     string kodeBarang = row.Cells[0].Value?.ToString() ?? string.Empty;
                     if (kodeBarang.Length == 0) continue;
 
-                    decimal qty = InputHelper.AmbilDecimal(row.Cells[3].Value);
+                    decimal qty = InputHelper.AmbilDecimal(row.Cells[4].Value);
                     if (qty <= 0m) continue;
 
                     decimal hargaSatuan = InputHelper.AmbilDecimal(row.Cells[2].Value);
-                    decimal subtotal = BulatkanSubtotal(InputHelper.AmbilDecimal(row.Cells[4].Value));
+                    decimal diskonItem = InputHelper.AmbilDecimal(row.Cells[3].Value);
+                    decimal subtotal = BulatkanSubtotal(InputHelper.AmbilDecimal(row.Cells[5].Value));
 
                     string namaBarang;
                     decimal stokTerbaru;
@@ -1103,6 +1165,7 @@ namespace AplikasiKasirSMK4
                         cmdDetail.Parameters.AddWithValue("@subtotal", subtotal);
                         cmdDetail.Parameters.AddWithValue("@hargaBeli", hargaBeli);
                         cmdDetail.Parameters.AddWithValue("@tipeHarga", tipeHarga);
+                        cmdDetail.Parameters.AddWithValue("@diskonItem", diskonItem);
                         cmdDetail.ExecuteNonQuery();
                     }
 
@@ -1232,12 +1295,13 @@ namespace AplikasiKasirSMK4
 
             e.Value = e.ColumnIndex switch
             {
-                2 or 4 => InputHelper.FormatNominal(angka),
-                3 => InputHelper.FormatJumlah(angka),
+                2 or 5 => InputHelper.FormatNominal(angka),
+                3 => angka > 0m ? $"{angka:0.##}%" : "-",
+                4 => InputHelper.FormatJumlah(angka),
                 _ => e.Value,
             };
 
-            e.FormattingApplied = e.ColumnIndex is 2 or 3 or 4;
+            e.FormattingApplied = e.ColumnIndex is 2 or 3 or 4 or 5;
         }
 
         private void FormKasir_FormClosing(object? sender, FormClosingEventArgs e)
